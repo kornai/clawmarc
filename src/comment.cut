@@ -1,0 +1,13 @@
+We thank Eliot Lear (Cisco) for penetrating criticism of an earlier draft.
+The specification and the reference implementation were developed with
+substantive assistance from GPT-5 Codex (OpenAI) and Claude Opus (Anthropic),
+including independent implementations of the differential test; Gemini 3.1
+Pro (Google) ran an initial pilot that exposed a missing PDF branch in the
+cataloger. GPT-5 Codex performed substantive experimental design,
+implementation, and analysis for the collection experiments and wrote two
+adversarial reviews, the second of which (2026-09-11) shaped this revision.
+Claude Fable 5.1 (Anthropic) drafted an earlier version from the
+specification and project record, minted the model cards, and revised the
+paper in response to the reviews. The paper is submitted under the sole
+authorship of Andr\'as Kornai, who is responsible for its content. This
+disclosure follows ACM policy on authorship and generative AI.

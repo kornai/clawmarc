@@ -1,0 +1,609 @@
+{
+  "summary": {
+    "seed": 20260907,
+    "root": "/Users/kornai/Other/Paper/Pdf",
+    "n_pdfs_in_root": 3295,
+    "sampled": 20,
+    "minted": 20,
+    "wall_s": 232.5,
+    "mean_extract_s": 0.18,
+    "mean_mint_s": 11.45,
+    "mean_preimage_chars": 53701,
+    "ir": {
+      "n_vectors": 20,
+      "pair_cosine_mean": 0.796,
+      "pair_cosine_min": 0.592,
+      "pair_cosine_max": 0.959
+    },
+    "keyword": "grammar",
+    "keyword_hits": [
+      "fillmore_1968.pdf",
+      "culicover_2005.pdf",
+      "mohri_2000.pdf"
+    ]
+  },
+  "rows": [
+    {
+      "file": "fillmore_1968.pdf",
+      "bytes": 5422995,
+      "ok": true,
+      "t_extract_s": 0.19,
+      "t_mint_s": 10.0,
+      "handler": "pdftotext",
+      "arena_class": 27,
+      "preimage_chars": 50093,
+      "truncated": true,
+      "err": ""
+    },
+    {
+      "file": "doherty_2000.pdf",
+      "bytes": 188186,
+      "ok": true,
+      "t_extract_s": 0.04,
+      "t_mint_s": 8.54,
+      "handler": "pdftotext",
+      "arena_class": 27,
+      "preimage_chars": 24332,
+      "truncated": true,
+      "err": ""
+    },
+    {
+      "file": "kubala_1999.pdf",
+      "bytes": 27866,
+      "ok": true,
+      "t_extract_s": 0.04,
+      "t_mint_s": 8.45,
+      "handler": "pdftotext",
+      "arena_class": 27,
+      "preimage_chars": 13177,
+      "truncated": true,
+      "err": ""
+    },
+    {
+      "file": "endresen_2013.pdf",
+      "bytes": 169856,
+      "ok": true,
+      "t_extract_s": 0.05,
+      "t_mint_s": 8.43,
+      "handler": "pdftotext",
+      "arena_class": 27,
+      "preimage_chars": 11787,
+      "truncated": true,
+      "err": ""
+    },
+    {
+      "file": "zhu_2019.pdf",
+      "bytes": 713532,
+      "ok": true,
+      "t_extract_s": 0.18,
+      "t_mint_s": 10.25,
+      "handler": "pdftotext",
+      "arena_class": 27,
+      "preimage_chars": 74391,
+      "truncated": true,
+      "err": ""
+    },
+    {
+      "file": "urmson_1958.pdf",
+      "bytes": 2222955,
+      "ok": true,
+      "t_extract_s": 0.06,
+      "t_mint_s": 8.73,
+      "handler": "pdftotext",
+      "arena_class": 27,
+      "preimage_chars": 37442,
+      "truncated": true,
+      "err": ""
+    },
+    {
+      "file": "resnik_1993.pdf",
+      "bytes": 1161463,
+      "ok": true,
+      "t_extract_s": 0.31,
+      "t_mint_s": 11.27,
+      "handler": "pdftotext",
+      "arena_class": 27,
+      "preimage_chars": 100000,
+      "truncated": true,
+      "err": ""
+    },
+    {
+      "file": "garg_2022.pdf",
+      "bytes": 3880228,
+      "ok": true,
+      "t_extract_s": 0.08,
+      "t_mint_s": 9.48,
+      "handler": "pdftotext",
+      "arena_class": 27,
+      "preimage_chars": 54828,
+      "truncated": true,
+      "err": ""
+    },
+    {
+      "file": "lerner_2017.pdf",
+      "bytes": 1869822,
+      "ok": true,
+      "t_extract_s": 0.11,
+      "t_mint_s": 9.05,
+      "handler": "pdftotext",
+      "arena_class": 27,
+      "preimage_chars": 91585,
+      "truncated": true,
+      "err": ""
+    },
+    {
+      "file": "giunchiglia_2023.pdf",
+      "bytes": 1393648,
+      "ok": true,
+      "t_extract_s": 0.06,
+      "t_mint_s": 9.0,
+      "handler": "pdftotext",
+      "arena_class": 27,
+      "preimage_chars": 47643,
+      "truncated": true,
+      "err": ""
+    },
+    {
+      "file": "mika_2008.pdf",
+      "bytes": 181284,
+      "ok": true,
+      "t_extract_s": 0.07,
+      "t_mint_s": 13.76,
+      "handler": "pdftotext",
+      "arena_class": 27,
+      "preimage_chars": 39871,
+      "truncated": true,
+      "err": ""
+    },
+    {
+      "file": "chakrabarti_2002.pdf",
+      "bytes": 747680,
+      "ok": true,
+      "t_extract_s": 0.1,
+      "t_mint_s": 9.94,
+      "handler": "pdftotext",
+      "arena_class": 27,
+      "preimage_chars": 51739,
+      "truncated": true,
+      "err": ""
+    },
+    {
+      "file": "frantar_2023.pdf",
+      "bytes": 521818,
+      "ok": true,
+      "t_extract_s": 0.07,
+      "t_mint_s": 12.01,
+      "handler": "pdftotext",
+      "arena_class": 27,
+      "preimage_chars": 56731,
+      "truncated": true,
+      "err": ""
+    },
+    {
+      "file": "culicover_2005.pdf",
+      "bytes": 269816,
+      "ok": true,
+      "t_extract_s": 0.09,
+      "t_mint_s": 11.48,
+      "handler": "pdftotext",
+      "arena_class": 27,
+      "preimage_chars": 99999,
+      "truncated": true,
+      "err": ""
+    },
+    {
+      "file": "jozefowicz_2015.pdf",
+      "bytes": 217041,
+      "ok": true,
+      "t_extract_s": 0.06,
+      "t_mint_s": 11.05,
+      "handler": "pdftotext",
+      "arena_class": 27,
+      "preimage_chars": 37730,
+      "truncated": true,
+      "err": ""
+    },
+    {
+      "file": "mohri_2000.pdf",
+      "bytes": 473463,
+      "ok": true,
+      "t_extract_s": 0.04,
+      "t_mint_s": 11.16,
+      "handler": "pdftotext",
+      "arena_class": 27,
+      "preimage_chars": 23181,
+      "truncated": true,
+      "err": ""
+    },
+    {
+      "file": "zoph_2017.pdf",
+      "bytes": 621253,
+      "ok": true,
+      "t_extract_s": 0.13,
+      "t_mint_s": 11.78,
+      "handler": "pdftotext",
+      "arena_class": 27,
+      "preimage_chars": 46390,
+      "truncated": true,
+      "err": ""
+    },
+    {
+      "file": "halpern_2005.pdf",
+      "bytes": 8378883,
+      "ok": true,
+      "t_extract_s": 0.19,
+      "t_mint_s": 10.97,
+      "handler": "pdftotext",
+      "arena_class": 27,
+      "preimage_chars": 100000,
+      "truncated": true,
+      "err": ""
+    },
+    {
+      "file": "penfield_2003.pdf",
+      "bytes": 124910,
+      "ok": true,
+      "t_extract_s": 0.09,
+      "t_mint_s": 17.39,
+      "handler": "pdftotext",
+      "arena_class": 27,
+      "preimage_chars": 20658,
+      "truncated": true,
+      "err": ""
+    },
+    {
+      "file": "kempe_1997.pdf",
+      "bytes": 388762,
+      "ok": true,
+      "t_extract_s": 1.57,
+      "t_mint_s": 26.16,
+      "handler": "pdftotext",
+      "arena_class": 27,
+      "preimage_chars": 92452,
+      "truncated": true,
+      "err": ""
+    }
+  ],
+  "ir": [
+    {
+      "query": "fillmore_1968.pdf",
+      "top3": [
+        [
+          "culicover_2005.pdf",
+          0.913
+        ],
+        [
+          "resnik_1993.pdf",
+          0.876
+        ],
+        [
+          "endresen_2013.pdf",
+          0.852
+        ]
+      ]
+    },
+    {
+      "query": "doherty_2000.pdf",
+      "top3": [
+        [
+          "mohri_2000.pdf",
+          0.862
+        ],
+        [
+          "resnik_1993.pdf",
+          0.852
+        ],
+        [
+          "culicover_2005.pdf",
+          0.846
+        ]
+      ]
+    },
+    {
+      "query": "kubala_1999.pdf",
+      "top3": [
+        [
+          "mika_2008.pdf",
+          0.879
+        ],
+        [
+          "resnik_1993.pdf",
+          0.877
+        ],
+        [
+          "zhu_2019.pdf",
+          0.857
+        ]
+      ]
+    },
+    {
+      "query": "endresen_2013.pdf",
+      "top3": [
+        [
+          "culicover_2005.pdf",
+          0.887
+        ],
+        [
+          "resnik_1993.pdf",
+          0.876
+        ],
+        [
+          "zhu_2019.pdf",
+          0.855
+        ]
+      ]
+    },
+    {
+      "query": "zhu_2019.pdf",
+      "top3": [
+        [
+          "resnik_1993.pdf",
+          0.908
+        ],
+        [
+          "kempe_1997.pdf",
+          0.898
+        ],
+        [
+          "giunchiglia_2023.pdf",
+          0.892
+        ]
+      ]
+    },
+    {
+      "query": "urmson_1958.pdf",
+      "top3": [
+        [
+          "fillmore_1968.pdf",
+          0.793
+        ],
+        [
+          "halpern_2005.pdf",
+          0.78
+        ],
+        [
+          "culicover_2005.pdf",
+          0.743
+        ]
+      ]
+    },
+    {
+      "query": "resnik_1993.pdf",
+      "top3": [
+        [
+          "culicover_2005.pdf",
+          0.928
+        ],
+        [
+          "giunchiglia_2023.pdf",
+          0.92
+        ],
+        [
+          "zhu_2019.pdf",
+          0.908
+        ]
+      ]
+    },
+    {
+      "query": "garg_2022.pdf",
+      "top3": [
+        [
+          "frantar_2023.pdf",
+          0.903
+        ],
+        [
+          "jozefowicz_2015.pdf",
+          0.894
+        ],
+        [
+          "zoph_2017.pdf",
+          0.892
+        ]
+      ]
+    },
+    {
+      "query": "lerner_2017.pdf",
+      "top3": [
+        [
+          "mika_2008.pdf",
+          0.788
+        ],
+        [
+          "zhu_2019.pdf",
+          0.762
+        ],
+        [
+          "halpern_2005.pdf",
+          0.754
+        ]
+      ]
+    },
+    {
+      "query": "giunchiglia_2023.pdf",
+      "top3": [
+        [
+          "resnik_1993.pdf",
+          0.92
+        ],
+        [
+          "culicover_2005.pdf",
+          0.893
+        ],
+        [
+          "zhu_2019.pdf",
+          0.892
+        ]
+      ]
+    },
+    {
+      "query": "mika_2008.pdf",
+      "top3": [
+        [
+          "resnik_1993.pdf",
+          0.898
+        ],
+        [
+          "giunchiglia_2023.pdf",
+          0.881
+        ],
+        [
+          "kubala_1999.pdf",
+          0.879
+        ]
+      ]
+    },
+    {
+      "query": "chakrabarti_2002.pdf",
+      "top3": [
+        [
+          "zoph_2017.pdf",
+          0.896
+        ],
+        [
+          "jozefowicz_2015.pdf",
+          0.892
+        ],
+        [
+          "garg_2022.pdf",
+          0.888
+        ]
+      ]
+    },
+    {
+      "query": "frantar_2023.pdf",
+      "top3": [
+        [
+          "jozefowicz_2015.pdf",
+          0.916
+        ],
+        [
+          "zoph_2017.pdf",
+          0.915
+        ],
+        [
+          "garg_2022.pdf",
+          0.903
+        ]
+      ]
+    },
+    {
+      "query": "culicover_2005.pdf",
+      "top3": [
+        [
+          "resnik_1993.pdf",
+          0.928
+        ],
+        [
+          "fillmore_1968.pdf",
+          0.913
+        ],
+        [
+          "giunchiglia_2023.pdf",
+          0.893
+        ]
+      ]
+    },
+    {
+      "query": "jozefowicz_2015.pdf",
+      "top3": [
+        [
+          "zoph_2017.pdf",
+          0.959
+        ],
+        [
+          "frantar_2023.pdf",
+          0.916
+        ],
+        [
+          "garg_2022.pdf",
+          0.894
+        ]
+      ]
+    },
+    {
+      "query": "mohri_2000.pdf",
+      "top3": [
+        [
+          "culicover_2005.pdf",
+          0.872
+        ],
+        [
+          "kempe_1997.pdf",
+          0.868
+        ],
+        [
+          "doherty_2000.pdf",
+          0.862
+        ]
+      ]
+    },
+    {
+      "query": "zoph_2017.pdf",
+      "top3": [
+        [
+          "jozefowicz_2015.pdf",
+          0.959
+        ],
+        [
+          "frantar_2023.pdf",
+          0.915
+        ],
+        [
+          "chakrabarti_2002.pdf",
+          0.896
+        ]
+      ]
+    },
+    {
+      "query": "halpern_2005.pdf",
+      "top3": [
+        [
+          "fillmore_1968.pdf",
+          0.849
+        ],
+        [
+          "culicover_2005.pdf",
+          0.847
+        ],
+        [
+          "resnik_1993.pdf",
+          0.837
+        ]
+      ]
+    },
+    {
+      "query": "penfield_2003.pdf",
+      "top3": [
+        [
+          "garg_2022.pdf",
+          0.84
+        ],
+        [
+          "halpern_2005.pdf",
+          0.821
+        ],
+        [
+          "doherty_2000.pdf",
+          0.812
+        ]
+      ]
+    },
+    {
+      "query": "kempe_1997.pdf",
+      "top3": [
+        [
+          "resnik_1993.pdf",
+          0.899
+        ],
+        [
+          "zhu_2019.pdf",
+          0.898
+        ],
+        [
+          "mohri_2000.pdf",
+          0.868
+        ]
+      ]
+    }
+  ]
+}

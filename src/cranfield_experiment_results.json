@@ -1,0 +1,92 @@
+{
+  "started_unix": 1789021514.2283661,
+  "dataset": {
+    "documents": 1400,
+    "queries": 225
+  },
+  "models": {
+    "bm25": {
+      "MAP": 0.27356734198225724,
+      "nDCG@10": 0.31508234637685534,
+      "P@10": 0.22577777777777777,
+      "Recall@100": 0.6966048064422676,
+      "queries": 225
+    },
+    "tfidf": {
+      "MAP": 0.25901019094044186,
+      "nDCG@10": 0.29480237404631743,
+      "P@10": 0.20533333333333334,
+      "Recall@100": 0.6991042874394268,
+      "queries": 225
+    },
+    "bge": {
+      "MAP": 0.32876748493757546,
+      "nDCG@10": 0.35911203861368085,
+      "P@10": 0.25377777777777777,
+      "Recall@100": 0.7583217951448086,
+      "queries": 225,
+      "dimensions": 384,
+      "seconds": 83.2,
+      "float16_query_rank_agreement": 1.0
+    },
+    "mbert": {
+      "MAP": 0.0725728872665031,
+      "nDCG@10": 0.07802530443144295,
+      "P@10": 0.05422222222222223,
+      "Recall@100": 0.3486401506894283,
+      "queries": 225,
+      "dimensions": 768,
+      "seconds": 245.5,
+      "float16_query_rank_agreement": 1.0
+    },
+    "xlmr": {
+      "MAP": 0.019176499089806245,
+      "nDCG@10": 0.020240949420113587,
+      "P@10": 0.014666666666666666,
+      "Recall@100": 0.12607320719833617,
+      "queries": 225,
+      "dimensions": 768,
+      "seconds": 248.1,
+      "float16_query_rank_agreement": 0.9911111111111112
+    },
+    "mpnet": {
+      "MAP": 0.24816484582818404,
+      "nDCG@10": 0.2807905690051015,
+      "P@10": 0.19555555555555557,
+      "Recall@100": 0.666135457870494,
+      "queries": 225,
+      "dimensions": 768,
+      "seconds": 145.1,
+      "float16_query_rank_agreement": 1.0
+    }
+  },
+  "cross_model": {
+    "bge-vs-mbert": {
+      "document_pair_spearman": 0.42759037378590364,
+      "nearest_neighbor_agreement": 0.15214285714285714
+    },
+    "bge-vs-xlmr": {
+      "document_pair_spearman": 0.44941645185633644,
+      "nearest_neighbor_agreement": 0.13
+    },
+    "bge-vs-mpnet": {
+      "document_pair_spearman": 0.7446931411275417,
+      "nearest_neighbor_agreement": 0.3492857142857143
+    },
+    "mbert-vs-xlmr": {
+      "document_pair_spearman": 0.6258744401727105,
+      "nearest_neighbor_agreement": 0.16285714285714287
+    },
+    "mbert-vs-mpnet": {
+      "document_pair_spearman": 0.46310495068783114,
+      "nearest_neighbor_agreement": 0.15571428571428572
+    },
+    "xlmr-vs-mpnet": {
+      "document_pair_spearman": 0.48177186767516683,
+      "nearest_neighbor_agreement": 0.14
+    }
+  },
+  "design": "BM25 and TF-IDF baselines versus four local embedding models; qrels are graded.",
+  "finished_unix": 1789022240.8605561,
+  "elapsed_seconds": 726.63218998909
+}

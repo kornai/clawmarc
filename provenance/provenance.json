@@ -1,0 +1,111 @@
+{
+  "schema_version": 1,
+  "slug": "clawmarc",
+  "bundle_created": "2026-09-07",
+  "created_by": "Claude Fable 5.1 (Anthropic), Claude Code CLI session 01XTBES24ETfXm3WvTBRw9ay, directed by András Kornai",
+  "origin": {
+    "public_bundle_rc1": "/Volumes/114/Proj/SW/ClawXiv/clawmarc (2026-06-23; GPT-5 Codex + Claude Opus 4.8)",
+    "github_checkout": "/Volumes/114/Proj/SW/ClawXiv/clawmarc-github (2026-06-28; draft -01 + LibAngel policy hooks)",
+    "github": "https://github.com/kornai/clawmarc",
+    "design_history": [
+      "/Volumes/114/Proj/SW/ClawXiv/rfc/",
+      "/Volumes/114/Proj/SW/LibAngel/Blackboard/ (2026-06-22/23)"
+    ]
+  },
+  "spec": {
+    "internet_draft": "draft-kornai-clawmarc-00",
+    "uploaded": "2026-06-24",
+    "datatracker": "https://datatracker.ietf.org/doc/draft-kornai-clawmarc/",
+    "ise_outcome": "declined for the Independent Submission stream by Eliot Lear (ISE); Datatracker state change 2026-09-01",
+    "staged_revision": "draft-kornai-clawmarc-02 (layout 1.3, DCMI Type Vocabulary classes; not uploaded)",
+    "layout": "1.3 — arena_class 16-27 = DCMI Type Vocabulary (alphabetical); 0 none; 1-2 structural; 3-15 reserved; 28-255 unassigned. AK ruling 2026-09-07."
+  },
+  "paper": {
+    "venue": "WADL 2026 (with JCDL 2026), Dallas, 2026-10-16; deadline 2026-09-16",
+    "prongs": {
+      "reviewer_facing": "src/clawmarc_wadl.tex (acmart sigconf, BibTeX ACM-Reference-Format; author: A. Kornai; AI + Lear in acknowledgments)",
+      "clawxiv_ready": "src/clawmarc.tex (article + clawxiv.sty + biblatex authoryear; authors: A. Kornai, Claude Fable 5.1)"
+    },
+    "drafted_by": "Claude Fable 5.1, 2026-09-07, from the spec, the LibAngel differential-test record, and AK's closing email to the ISE",
+    "current_revision_substantive_work": {
+      "agent": "OpenAI GPT-5 Codex",
+      "date": "2026-09-10",
+      "role": "referee analysis, experiment design and implementation, execution of Cranfield and NewReuters evaluations, statistical analysis, design and implementation of a Linux transportability probe, and stylistic revision of the reviewer-facing WADL prong",
+      "submission_authorship": "The WADL submission remains under the sole authorship of András Kornai; the substantive AI contribution is disclosed in the acknowledgments."
+    },
+    "arguments_from_ak": "sections on fixed size, machine payload, classes-not-subject-codes, registry (AK's email text quoted in the clawxiv prong's Provenance section)",
+    "measured_claims": {
+      "differential_test_source": "/Volumes/114/Proj/SW/LibAngel/Blackboard/CLAUDE_RECONCILE_HANDOFF_20260622T160951Z.md",
+      "cosine_intra_implementation": 0.9999999999,
+      "cosine_same_text_cross_pipeline": 0.989,
+      "cosine_card_to_card": 0.932,
+      "reference_cards_layout_1_3": {
+        "dropofwater_card_id": "d71d5da6b21131b0f8be8363023d1225feeaacabc8bcfcbdb0ca3b979463a343",
+        "geminiexit_card_id": "bf8a9b06ede16f8679bddc40593bbd52c64a86ff54c054da88016bcc70aad84a",
+        "schema_sha256": "1dfaee46853b9b3e4c2786ac7b730cc393967ac8444ecbf556967e73ef4d86f1"
+      },
+      "model_cards_layout_1_3": {
+        "note": "root cards for the four embedding-model archives, src/model_resources/cards/; schema digest = the C header (1dfaee46…), same as the reference cards; each binds its .tar.zst by SHA-256 and a two-field {model, archive} canonical-JSON manifest; locators: HTTPS (lebadus.ai only), IPFS CIDv1, Swarm reference. Minted 2026-09-11 by src/mint_model_cards.py (third mint: locators added, kornai.homeip.net dropped, schema realigned).",
+        "bge-small-en-v1.5": {"card_id": "1a5be0ef871e3d50cbb350a93df435a18b0e18188df9a0d013a199b98f08f6c1", "archive_sha256": "417c6f409e54bb5e2c69f70572dae50c5a21fab33aeb1e775cb9296549a7b8ca", "profile": 1},
+        "bert-base-multilingual-cased": {"card_id": "ad4a6824cb864f613a31cdeeae257a2d51905594533a22bcab056623900f569c", "archive_sha256": "e6b69b84dcddbccc09da5f433cd816ebab5d9ed55d4ccf06f3103eeebcf2defa", "profile": 2},
+        "paraphrase-multilingual-mpnet-base-v2": {"card_id": "d7db5051c39f604cb785e4213ee559af746a3dad015115a2135300d754a36b70", "archive_sha256": "2c69401687941ea50096af37554dd6f65baa0cadb0074bc92d326f52f173a1b2", "profile": 3},
+        "xlm-roberta-base": {"card_id": "356ccdf05360219de57bc36b2076b39b44a5f6ade1b18ec7c67efd47fffc985a", "archive_sha256": "17fe5d884ba71ad3e3777fbcf14fed3b1c0a8a884f1d232e11ceeb9531abfe39", "profile": null},
+        "swarm_batch": "9adf1dbb38bd25eb024e9688d724d8e91bc1ad281722f39a8ec179b62aa2dd6e (depth 24, immutable, TTL 95561117 s ≈ 3.03 y, bought 2026-09-10)",
+        "locator_manifests": "src/model_resources/IPFS_CIDS.tsv, SWARM_REFS.tsv, PUBLISH_MANIFEST.md"
+      },
+      "signatures": "All six published cards are signed with deterministic test seeds recorded in their sidecars (key_kind = deterministic-test-seed); the private keys are derivable from the public seed labels, so the signatures attest reproducibility, not issuer identity. libangel_mint.py --issuer-key-file loads a PEM Ed25519 release key; no release key has been generated (AK's key-custody decision).",
+      "collection_experiments": {
+        "seed": 20260910,
+        "cranfield": {"documents": 1400, "queries": 225, "judged": true, "results": "src/cranfield_experiment_results.json sha256 fd4926382c8dfc18cffda5969ba609685a92f79cd498c09862e5230c7cfa8b4d"},
+        "newreuters": {"documents": 5000, "queries": 100, "relevance": "same-topic proxy (proxy-MAP, proxy-P@10)", "results": "src/newreuters5000_results.json sha256 870b21da07b6041ad1a09cfb4183f85db0fd5f2acddaaa4938f8b005b0f17f0e"},
+        "scripts": "src/run_ir_experiments.py 7feeeff914fb4887c45739fd75e70a9d100df0d65f335fbc9b7e353a27c721bd; src/run_cranfield_experiment.py cfca670d40f79dd365948950185c8cdd2261e893dde29778f452dc35e5017172",
+        "demonstration_and_model_comparison": "seed 20260907; Blackboard/pilot_run_20260907_mbert_fulltext.json 4c78183bffca49cef0b0349ec8d23e4ee7184be4a3cc2ca268c034c8bcc0f4e4; Blackboard/model_compare_20260908.json a2b53220eebde537f17683fdb40adc9f47d67a6dffdace5f71ff71dfba861b4e",
+        "runtime": "python 3.12.9, torch 2.14.0, transformers 4.49.0, sentence-transformers 5.6.0, numpy 2.2.3; CPU fp32 inference, f16le storage; Apple M2, 26 GB, macOS 26.6.2",
+        "chunking": "480 body tokens (profiles 1, 2, XLM-R), 126 (profile 3); stride 0; token-count weighted mean; L2 normalization",
+        "uncertainty": "single runs; no confidence intervals"
+      }
+    },
+    "scale_claim": "none; batch machinery staged, not run (verified: only a handful of minted cards exist on disk 2026-09-07)",
+    "revision_rc2": {
+      "trigger": "Blackboard/wadl_referee_report_draft.md (author unrecorded; placed 15:54) + AK rulings",
+      "changes": "ISE framing removed; design on its own terms; DCMI classes; sections on embedding obsolescence, format migration (BagIt), Linked Data/JSON-LD/schema.org/Signposting; pilot paragraph; governance section neutral",
+      "pilot": {
+        "script": "reference/scripts/pilot_other_ir.py",
+        "seed": 20260907,
+        "report": "Blackboard/pilot_run_20260907.{md,json}",
+        "sampled": 20,
+        "minted": 20,
+        "mean_extract_s": 0.18,
+        "mean_mint_s": 11.45,
+        "pair_cosine_mean": 0.796,
+        "pair_cosine_min": 0.592,
+        "pair_cosine_max": 0.959,
+        "first_pass": "Gemini 3.1 Pro, test_mint_and_ir.py, 16:38 — embedded placeholder strings (no PDF branch then); superseded, credited"
+      }
+    },
+    "revision_rc3": {
+      "date": "2026-09-11",
+      "by": "Claude Fable 5.1 (app), directed by AK",
+      "trigger": "Blackboard/wadl_referee_report_codex_20260911.md (GPT-5 Codex adversarial review; weak reject in the externally released state)",
+      "changes": "ACM reference strip restored; three public format states (Datatracker -00 / GitHub historical / deposited v1.rc3 bundle normative) stated; model root cards and their publication described as staged; trust model section (test keys vs release keys, admission, rotation, revocation, profile-number authority); manifest-binding language corrected; fixed-size claims recast as hypotheses with a benchmark in future work; results table with query counts and proxy-MAP naming; reproducibility declaration; comparison table; XLM-R and the four checkpoints cited exactly",
+      "public_state_at_writing": "lebadus.ai serves the four archives (verified sizes 2026-09-11; SHA256SUMS, cards and PUBLISH_MANIFEST not yet uploaded; stale paraphrase-multilingual-mpnet-base-v.tar.zst still present); GitHub at layout 1.2; NAS mirror kornai.homeip.net dropped after /4tssd (sda) went DID_BAD_TARGET mid-transfer 2026-09-10",
+      "cross_route_verification": "2026-09-12: full-download, size-checked SHA-256 comparison of all four archives against SHA256SUMS on HTTP (lebadus.ai), IPFS (local Kubo pins), and Swarm (local bee, batch 9adf1dbb…): 12/12 byte-exact. Log: Blackboard/route_recheck_20260911.log. An earlier run's mismatches on the three large archives were 900-second download timeouts, not content errors."
+    }
+  },
+  "citations": {
+    "count": 25,
+    "verified": "all, 2026-09-07 (arXiv abstract pages, RFC Editor info pages, ODU author copy, adalerner.com author copy)",
+    "archived": "~/Other/Paper/{Pdf,Txt}/ per CKAN conventions: benet_2014, aturban_2019, xiao_2023, alam_2016, lerner_2017, vandesompel_2013, kunze_2007, josefsson_2017, kornai_2026 (the I-D text); kunze_2018 (RFC 8493), kellogg_2020 (JSON-LD 1.1), dcmi_2020, vandesompel_2015 (Html)",
+    "not_archived": "Krajewski:2011, Avram:1975 (books), Lagoze:2001, ISO:2017 (paywalled standard) — cited from knowledge of the works; Guha:2016 (cacm.acm.org 403) — cited from knowledge; BAAI:2023, Google:2019, Reimers:2021, FacebookAI:2019 are live Hugging Face model-card pages — the checkpoint bytes they name are archived as the model archives themselves",
+    "added_rc3": "Conneau:2020b (XLM-R; archived ~/Other/Paper/Pdf/conneau_2020b.pdf), BAAI:2023, Google:2019, Reimers:2021, FacebookAI:2019 — all added to ml.bib; Conneau:2020 in ml.bib is a different ACL 2020 paper and was left untouched",
+    "ml_bib_fix": "Kornai:2026a url corrected 2604.16479 -> 2604.16476"
+  },
+  "private_material": [
+    "Blackboard/lear_exchange_20260907.md — strip from public releases"
+  ],
+  "version": "v1.rc3",
+  "incidents": [
+    "2026-09-07 16:54 concurrent edit of reference/libangel_catalog.py by the live Gemini CLI session (pid 74385); duplicate PDF/EPUB branches with a removed constant; repaired; note left in Blackboard/CLAUDE_TO_GEMINI_layout13_20260907.md",
+    "2026-09-07 ~17:00 kramdown-rfc fetched reference.RFC.8174.xml and reference.RFC.8032.xml from bib.ietf.org (unannounced outbound connection)"
+  ]
+}

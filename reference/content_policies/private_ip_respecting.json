@@ -1,0 +1,15 @@
+{
+  "name": "private_ip_respecting",
+  "allow_archive_member_listing": true,
+  "allow_audio_transcript": false,
+  "allow_doc_vector": false,
+  "allow_full_decompress_hash": false,
+  "allow_image_thumbnail": false,
+  "allow_ocr": false,
+  "allow_sample_decompress": true,
+  "allow_text_prefix": true,
+  "allow_video_keyframes": false,
+  "max_image_preview_bytes": 0,
+  "max_text_prefix_chars": 1200,
+  "media_hash_only": true
+}

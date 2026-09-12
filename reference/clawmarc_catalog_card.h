@@ -29,26 +29,38 @@
 #define CXCC_MAGIC "CXCC"
 
 #define CXCC_LAYOUT_MAJOR 1u
-#define CXCC_LAYOUT_MINOR 2u
+#define CXCC_LAYOUT_MINOR 3u   /* 1.3: arena_class 16-27 = DCMI Type Vocabulary */
 
+/* arena_class (one byte, 256 values).
+ *   0        no class asserted (opaque artefact; a producer MUST NOT fabricate
+ *            a document vector for it)
+ *   1-2      clawmarc structural: the artefact is a concatenation of cards
+ *            (indirect) or of indirect cards (doubly indirect), 4096-byte stride
+ *   3-15     reserved for clawmarc structural use
+ *   16-27    the twelve classes of the DCMI Type Vocabulary, in the alphabetical
+ *            order of the vocabulary (http://purl.org/dc/dcmitype/), so that
+ *            arena_class 16+i names the i-th term. Subject description does NOT
+ *            live here: it goes in the arena's classification text and in the
+ *            machine payload.
+ *   28-255   unassigned
+ */
 enum cxcc_arena_class {
-    CXCC_CLASS_CATALOG_OBJECT = 0,
+    CXCC_CLASS_UNSPECIFIED = 0,
     CXCC_CLASS_INDIRECT_CATALOG_CARD = 1,
     CXCC_CLASS_DOUBLY_INDIRECT_CATALOG_CARD = 2,
 
-    CXCC_CLASS_ARTICLE = 16,
-    CXCC_CLASS_BOOK = 17,
-    CXCC_CLASS_PICTURE = 18,
-    CXCC_CLASS_MOVIE = 19,
-    CXCC_CLASS_MUSIC = 20,
-    CXCC_CLASS_SOFTWARE = 21,
-    CXCC_CLASS_DATASET = 22,
-    CXCC_CLASS_MAP = 23,
-    CXCC_CLASS_METADATA = 24,
-    CXCC_CLASS_SEQUENCE = 25,
-    CXCC_CLASS_MODEL = 26,
-    CXCC_CLASS_WEBPAGE = 27,
-    CXCC_CLASS_ARCHIVE = 28   /* zip/tar/etc.; no archival-format subtypes in rc1 */
+    CXCC_CLASS_DCMI_COLLECTION = 16,           /* dcmitype:Collection */
+    CXCC_CLASS_DCMI_DATASET = 17,              /* dcmitype:Dataset */
+    CXCC_CLASS_DCMI_EVENT = 18,                /* dcmitype:Event */
+    CXCC_CLASS_DCMI_IMAGE = 19,                /* dcmitype:Image (superclass) */
+    CXCC_CLASS_DCMI_INTERACTIVE_RESOURCE = 20, /* dcmitype:InteractiveResource */
+    CXCC_CLASS_DCMI_MOVING_IMAGE = 21,         /* dcmitype:MovingImage */
+    CXCC_CLASS_DCMI_PHYSICAL_OBJECT = 22,      /* dcmitype:PhysicalObject */
+    CXCC_CLASS_DCMI_SERVICE = 23,              /* dcmitype:Service */
+    CXCC_CLASS_DCMI_SOFTWARE = 24,             /* dcmitype:Software */
+    CXCC_CLASS_DCMI_SOUND = 25,                /* dcmitype:Sound */
+    CXCC_CLASS_DCMI_STILL_IMAGE = 26,          /* dcmitype:StillImage */
+    CXCC_CLASS_DCMI_TEXT = 27                  /* dcmitype:Text */
 };
 
 /* Coarse artefact-size magnitude bucket (size_class byte). 256 values; rc1

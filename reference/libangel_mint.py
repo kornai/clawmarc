@@ -10,13 +10,20 @@ import os
 import re
 import subprocess
 import struct
+import sys
 import zipfile
 from pathlib import Path
 from typing import Any
 
+sys.path.insert(0, str(Path(__file__).resolve().parent / "reference"))
+
+from cryptography.hazmat.primitives import serialization
+from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+
+from content_policy import bool_override, clamp_text_prefix, load_content_policy
 from libangel_card import (
     CardInput,
-    CLASS_ARTICLE,
+    CLASS_TEXT,
     SIZE_MB,
     TextSegments,
     canonical_json_bytes,
@@ -30,12 +37,31 @@ from libangel_card import (
     sign_card,
     verify_card,
     PROFILE_BGE_SMALL_EN_V1_5_F16_384,
+    PROFILE_MBERT_CASED_F16_768,
+    PROFILE_MPNET_MULTILINGUAL_F16_768,
 )
 
 
 DEFAULT_ISSUER_SEED = "LibAngel reference issuer v1: GPT-5 Codex independent DropOfWater card"
 DEFAULT_ISSUED_UNIX = 1782071790  # 2026-06-21T19:56:30Z, later AI signature timestamp
-DEFAULT_EMBEDDING_MODEL = "BAAI/bge-small-en-v1.5"
+DEFAULT_EMBEDDING_MODEL = "bert-base-multilingual-cased"
+
+# model name -> (profile id, dimensions, mode string); f16le vector = 2*dim bytes
+EMBEDDING_PROFILES = {
+    "BAAI/bge-small-en-v1.5": (PROFILE_BGE_SMALL_EN_V1_5_F16_384, 384, "bge-small-en-v1.5-f16le"),
+    "bert-base-multilingual-cased": (PROFILE_MBERT_CASED_F16_768, 768, "mbert-cased-f16le"),
+    "sentence-transformers/paraphrase-multilingual-mpnet-base-v2": (
+        PROFILE_MPNET_MULTILINGUAL_F16_768, 768, "paraphrase-multilingual-mpnet-base-v2-f16le"),
+}
+
+
+def lookup_embedding_profile(model_name: str) -> tuple[int, int, str] | None:
+    if model_name in EMBEDDING_PROFILES:
+        return EMBEDDING_PROFILES[model_name]
+    # a local directory is identified by its final path component
+    base = os.path.basename(os.path.normpath(model_name))
+    by_base = {k.split("/")[-1]: v for k, v in EMBEDDING_PROFILES.items()}
+    return by_base.get(base)
 DEFAULT_TEXT_PROFILE = "cxcc-text-v1"
 os.environ.setdefault("TOKENIZERS_PARALLELISM", "false")
 LAST_TEXT_EXTRACTOR = "none"
@@ -130,7 +156,13 @@ def clean_embedding_text(text: str) -> str:
     return re.sub(r"\s+", " ", text).strip()
 
 
-def bge_small_embedding_f16le(text: str, model_name: str) -> tuple[bytes, dict[str, Any]]:
+def document_embedding_f16le(text: str, model_name: str) -> tuple[bytes, dict[str, Any]]:
+    profile = lookup_embedding_profile(model_name)
+    if profile is None:
+        raise SystemExit(
+            f"no embedding profile registered for {model_name}; known: {', '.join(EMBEDDING_PROFILES)}"
+        )
+    profile_id, expected_dim, mode = profile
     try:
         from sentence_transformers import SentenceTransformer
         import numpy as np
@@ -162,15 +194,15 @@ def bge_small_embedding_f16le(text: str, model_name: str) -> tuple[bytes, dict[s
     if norm == 0.0:
         raise SystemExit("embedding vector has zero norm")
     vector = vector / norm
-    if len(vector) != 384:
-        raise SystemExit(f"{model_name} returned {len(vector)} dimensions, expected 384")
+    if len(vector) != expected_dim:
+        raise SystemExit(f"{model_name} returned {len(vector)} dimensions, expected {expected_dim}")
 
     embedding = b"".join(struct.pack("<e", float(x)) for x in vector)
     return embedding, {
-        "embedding_mode": "bge-small-en-v1.5-f16le",
+        "embedding_mode": mode,
         "embedding_status": "provisional-long-body-reduction",
         "reduction_policy": "producer-choice until the TACL pooling study pins a reduction",
-        "embedding_profile_id": PROFILE_BGE_SMALL_EN_V1_5_F16_384,
+        "embedding_profile_id": profile_id,
         "model": model_name,
         "dim": len(vector),
         "pooling": "Producer-choice provisional reduction: token chunks of 480 body tokens; encode each chunk with normalize_embeddings=True; token-count weighted mean; final L2 normalize",
@@ -218,6 +250,14 @@ def make_card(args: argparse.Namespace) -> tuple[bytes, dict[str, Any]]:
     bundle = Path(args.bundle)
     bundle_bytes = bundle.read_bytes()
     bundle_sha = sha256_bytes(bundle_bytes)
+    content_policy = load_content_policy(
+        args.content_policy,
+        name=args.policy_name,
+        allow_doc_vector=bool_override(args.allow_doc_vector, args.no_doc_vector or args.no_embedding),
+        allow_text_prefix=bool_override(args.allow_text_prefix, args.no_text_prefix),
+        allow_ocr=bool_override(args.allow_ocr, args.no_ocr),
+        max_text_prefix_chars=args.max_text_prefix_chars,
+    )
 
     with zipfile.ZipFile(bundle, "r") as zf:
         project_bytes = read_zip_member(zf, "project.yaml")
@@ -289,19 +329,39 @@ def make_card(args: argparse.Namespace) -> tuple[bytes, dict[str, Any]]:
     }
     locator_set_sha = sha256_bytes(canonical_json_bytes(locators))
 
-    issuer_private = deterministic_private_key(args.issuer_seed)
+    if args.issuer_key_file:
+        loaded = serialization.load_pem_private_key(Path(args.issuer_key_file).read_bytes(), password=None)
+        if not isinstance(loaded, Ed25519PrivateKey):
+            raise SystemExit(f"{args.issuer_key_file}: not an Ed25519 private key")
+        issuer_private, issuer_key_kind = loaded, "release-key-file"
+    else:
+        # The seed label is public (it is written to the sidecar), so this key
+        # is reproducible by anyone: a test signature, not an issuer identity.
+        issuer_private, issuer_key_kind = deterministic_private_key(args.issuer_seed), "deterministic-test-seed"
+        print("warning: signing with the deterministic test seed; the signature is forgeable by design "
+              "(pass --issuer-key-file for release signing)", file=sys.stderr)
     segments = build_segments(project, tex_text, args)
-    embed_text = embedding_source_text(segments, segments.body)
-    if args.no_embedding:
+    full_body = segments.body
+    segments = TextSegments(
+        title=segments.title,
+        abstract=segments.abstract,
+        keywords=segments.keywords,
+        classification=segments.classification,
+        body=clamp_text_prefix(segments.body, content_policy),
+    )
+    # The document vector is computed over the full extracted text; the
+    # content-policy clamp applies only to the human-readable card prefix.
+    embed_text = embedding_source_text(segments, full_body)
+    if not content_policy.get("allow_doc_vector"):
         embedding = b""
         embedding_profile_id = 0
         embedding_policy = {
             "embedding_mode": "none",
-            "reason": "Caller explicitly requested --no-embedding.",
+            "reason": "Content policy disabled document-vector extraction.",
             "deterministic": True,
         }
     else:
-        embedding, embedding_policy = bge_small_embedding_f16le(embed_text, args.embedding_model)
+        embedding, embedding_policy = document_embedding_f16le(embed_text, args.embedding_model)
         embedding_profile_id = embedding_policy["embedding_profile_id"]
 
     inp = CardInput(
@@ -309,7 +369,7 @@ def make_card(args: argparse.Namespace) -> tuple[bytes, dict[str, Any]]:
         work_created_unix=work_created,
         work_revised_unix=work_revised,
         sequence=args.sequence,
-        arena_class=CLASS_ARTICLE,
+        arena_class=CLASS_TEXT,
         size_class=SIZE_MB,
         schema_sha256=schema_sha,
         object_sha256=bundle_sha,
@@ -352,7 +412,12 @@ def make_card(args: argparse.Namespace) -> tuple[bytes, dict[str, Any]]:
             **verify_meta,
         },
         "issuer": {
-            "seed_label": args.issuer_seed,
+            "seed_label": args.issuer_seed if issuer_key_kind == "deterministic-test-seed" else "",
+            "key_kind": issuer_key_kind,
+            "key_note": ("Private key derived from the public seed label; forgeable by design. "
+                         "The signature attests reproducibility, not issuer identity."
+                         if issuer_key_kind == "deterministic-test-seed" else
+                         "Release key loaded from file; verify the public key through an authenticated channel."),
             "public_key_pem": public_key_pem(issuer_private).strip(),
         },
         "locators": locators,
@@ -372,6 +437,7 @@ def make_card(args: argparse.Namespace) -> tuple[bytes, dict[str, Any]]:
             **embedding_policy,
             "deterministic": True,
         },
+        "content_policy": content_policy,
     }
     return signed, meta
 
@@ -385,6 +451,9 @@ def main() -> None:
     parser.add_argument("--out-card", required=True)
     parser.add_argument("--out-meta", required=True)
     parser.add_argument("--issuer-seed", default=DEFAULT_ISSUER_SEED)
+    parser.add_argument("--issuer-key-file",
+                        help="PEM-encoded Ed25519 private key for release signing; without it the "
+                             "deterministic test seed is used and the signature is forgeable by design")
     parser.add_argument("--sequence", type=int, default=1)
     parser.add_argument("--card-issued-unix", type=int)
     parser.add_argument("--work-created-unix", type=int)
@@ -398,6 +467,15 @@ def main() -> None:
     parser.add_argument("--keywords", default="")
     parser.add_argument("--classification", default="")
     parser.add_argument("--embedding-model", default=DEFAULT_EMBEDDING_MODEL)
+    parser.add_argument("--content-policy", help="JSON content extraction policy")
+    parser.add_argument("--policy-name")
+    parser.add_argument("--max-text-prefix-chars", type=int)
+    parser.add_argument("--allow-text-prefix", action="store_true")
+    parser.add_argument("--no-text-prefix", action="store_true")
+    parser.add_argument("--allow-doc-vector", action="store_true")
+    parser.add_argument("--no-doc-vector", action="store_true")
+    parser.add_argument("--allow-ocr", action="store_true")
+    parser.add_argument("--no-ocr", action="store_true")
     parser.add_argument("--no-embedding", action="store_true")
     args = parser.parse_args()
 

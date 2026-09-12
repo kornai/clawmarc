@@ -1,0 +1,16 @@
+__pycache__/
+*.py[cod]
+.DS_Store
+.refcache/
+*.aux
+*.log
+*.bbl
+*.blg
+*.bcf
+*.run.xml
+*.out
+*.toc
+src/model_resources/archives/
+*.tar.zst
+Blackboard/lear_exchange_20260907.md
+cards_backup*/

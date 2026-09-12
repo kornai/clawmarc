@@ -1,0 +1,68 @@
+# Configuration for batch_gzip_firstpass.sh.
+#
+# Run on the compute/orchestration host, e.g. nessie:
+#   bash /path/to/batch_gzip_firstpass.sh /path/to/this.conf
+
+# Source may be local or one ssh hop away.  For volatile, set SOURCE_HOST.
+SOURCE_HOST="volatile"
+SOURCE_DIR="/path/on/volatile/flat-gzip-directory"
+FILE_GLOB="*.gz"
+
+# Local work area on the compute host.  Must have room for one batch of data,
+# cards, logs, and temporary files.
+WORK_ROOT="/data/clawmarc_work"
+
+# Destination roots.  These may be local paths or rsync remote specs such as:
+#   user@thirdhost:/srv/dataverse/batches
+#   user@thirdhost:/srv/dataverse/Cards
+BATCH_DEST="user@thirdhost:/path/to/BatchDir"
+CARD_DEST="user@thirdhost:/path/to/Cards"
+
+# Batching and policy.
+BATCH_SIZE=450
+DOCVEC="no"
+SAMPLE_DECOMPRESSED_CHARS=3000
+CLASSIFICATION="gzip.sampled-line-text"
+KEYWORDS="gzip, English text, tabular annotation, first-pass"
+
+# Content extraction policy.  This is mechanism, not governance: it records
+# which derived representations this run is configured/authorized to create.
+CONTENT_POLICY_NAME="public_academic_text_firstpass"
+CONTENT_POLICY_TEMPLATE="$CLAWMARC_DIR/content_policies/public_academic_text_firstpass.json"
+ALLOW_TEXT_PREFIX="yes"
+ALLOW_DOC_VECTOR="no"
+ALLOW_IMAGE_THUMBNAIL="no"
+ALLOW_OCR="no"
+ALLOW_AUDIO_TRANSCRIPT="no"
+ALLOW_VIDEO_KEYFRAMES="no"
+ALLOW_ARCHIVE_MEMBER_LISTING="no"
+ALLOW_FULL_DECOMPRESS_HASH="no"
+ALLOW_SAMPLE_DECOMPRESS="yes"
+MEDIA_HASH_ONLY="yes"
+MAX_TEXT_PREFIX_CHARS=3000
+
+# LibAngel/clawmarc location on this host.
+CLAWMARC_DIR="/tmp/clawmarc"
+PYTHON="/usr/bin/python3"
+SCHEMA="$CLAWMARC_DIR/reference/clawmarc_catalog_card.h"
+LIBANGEL_CATALOG="$CLAWMARC_DIR/libangel_catalog.py"
+COLLECTION_MINTER="$CLAWMARC_DIR/scripts/mint_collection_card.py"
+CONTENT_POLICY_JSON="$WORK_ROOT/content_policy.json"
+
+# Optional stable issuer/timestamp knobs.
+ISSUER_SEED="LibAngel gzip first-pass issuer v0"
+COLLECTION_ISSUER_SEED="LibAngel batch collection issuer v0"
+ORCID="0000-0001-6078-6840"
+CARD_ISSUED_UNIX=""
+
+# rsync behavior.  --partial helps with interruptions; --append-verify helps
+# resumed large-file copies where supported by both ends.
+RSYNC_OPTS="-a --partial --append-verify"
+
+# If nonempty, use this existing newline-delimited relative file list instead
+# of enumerating SOURCE_DIR.  Useful for freezing a run.
+FILE_MANIFEST=""
+
+# Set to yes to build Meta/all_indirect.cards and Meta/root.doubly_indirect.cxcc
+# after all batches are complete.
+MAKE_DOUBLY_INDIRECT="yes"

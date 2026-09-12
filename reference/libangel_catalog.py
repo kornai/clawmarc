@@ -10,20 +10,23 @@ import json
 import mimetypes
 import re
 import subprocess
+import sys
 import zipfile
 from pathlib import Path
 from typing import Any
 
+sys.path.insert(0, str(Path(__file__).resolve().parent / "reference"))
+
+from content_policy import bool_override, clamp_text_prefix, load_content_policy
 from libangel_card import (
-    CLASS_ARCHIVE,
-    CLASS_ARTICLE,
+    CLASS_COLLECTION,
     CLASS_DATASET,
-    CLASS_METADATA,
-    CLASS_MODEL,
-    CLASS_MUSIC,
-    CLASS_PICTURE,
+    CLASS_MOVING_IMAGE,
     CLASS_SOFTWARE,
-    CLASS_WEBPAGE,
+    CLASS_SOUND,
+    CLASS_STILL_IMAGE,
+    CLASS_TEXT,
+    CLASS_UNSPECIFIED,
     PROFILE_NONE,
     CardInput,
     TextSegments,
@@ -41,13 +44,13 @@ from libangel_card import (
 from libangel_mint import (
     DEFAULT_EMBEDDING_MODEL,
     DEFAULT_ISSUER_SEED,
-    bge_small_embedding_f16le,
+    document_embedding_f16le,
     embedding_source_text,
     parse_simple_yaml,
     tex_to_search_text,
 )
 
-DEFAULT_SCHEMA = str(Path(__file__).with_name("clawmarc_catalog_card.h"))
+DEFAULT_SCHEMA = str(Path(__file__).resolve().parent / "reference" / "clawmarc_catalog_card.h")
 
 
 def utc_now() -> int:
@@ -95,20 +98,25 @@ def detect_mime(path: Path) -> str:
     return guess or "application/octet-stream"
 
 
-def image_payload(path: Path) -> bytes:
+def image_payload(path: Path, max_preview_bytes: int = 128) -> bytes:
+    if max_preview_bytes < 128:
+        return b""
     try:
         from PIL import Image
     except ImportError:
         return b""
     try:
         with Image.open(path) as img:
-            img = img.convert("L")
-            img.thumbnail((48, 48))
-            canvas = Image.new("L", (48, 48), 255)
-            x = (48 - img.width) // 2
-            y = (48 - img.height) // 2
+            img = img.convert("1")
+            img.thumbnail((32, 32))
+            canvas = Image.new("1", (32, 32), 1)
+            x = (32 - img.width) // 2
+            y = (32 - img.height) // 2
             canvas.paste(img, (x, y))
-            return b"CXVG1" + bytes([48, 48]) + canvas.tobytes()
+            preview = canvas.tobytes()
+            if len(preview) > max_preview_bytes:
+                return b""
+            return b"CXB1" + bytes([32, 32]) + preview
     except Exception:
         return b""
 
@@ -117,20 +125,29 @@ def extract_text(path: Path, mime: str) -> tuple[int, str, str, bytes, int]:
     suffix = path.suffix.lower()
     if suffix == ".tex":
         text = tex_to_search_text(path.read_text(encoding="utf-8", errors="replace"))
-        return CLASS_ARTICLE, "tex-detex", text, b"", 1
+        return CLASS_TEXT, "tex-detex", text, b"", 1
+    if suffix == ".pdf" or mime == "application/pdf":
+        # Text-bearing PDF: pdftotext (poppler). A scanned PDF yields no text and
+        # falls through to a descriptor-only card; OCR is a policy decision left
+        # to the caller (see content_policy allow_ocr).
+        text = run_text_tool(["pdftotext", "-layout", "-enc", "UTF-8", str(path), "-"])
+        return CLASS_TEXT, "pdftotext", text, b"", 1 if text.strip() else 0
+    if suffix == ".epub":
+        text = run_text_tool(["pandoc", "--from", "epub", "--to", "plain", str(path)])
+        return CLASS_TEXT, "epub-pandoc", text, b"", 1 if text.strip() else 0
     if suffix in {".html", ".htm"} or mime == "text/html":
         text = run_text_tool(["pandoc", "--from", "html", "--to", "plain", str(path)])
         if not text:
             text = path.read_text(encoding="utf-8", errors="replace")
-        return CLASS_WEBPAGE, "html-pandoc", text, b"", 1
+        return CLASS_TEXT, "html-pandoc", text, b"", 1
     if suffix in {".md", ".txt"} or mime.startswith("text/"):
-        return CLASS_ARTICLE, "utf8-text", path.read_text(encoding="utf-8", errors="replace"), b"", 1
+        return CLASS_TEXT, "utf8-text", path.read_text(encoding="utf-8", errors="replace"), b"", 1
     if suffix == ".docx":
         text = run_text_tool(["docx2txt", str(path), "-"])
-        return CLASS_ARTICLE, "docx2txt", text, b"", 1 if text else 0
+        return CLASS_TEXT, "docx2txt", text, b"", 1 if text else 0
     if suffix == ".doc":
         text = run_text_tool(["catdoc", str(path)])
-        return CLASS_ARTICLE, "catdoc", text, b"", 1 if text else 0
+        return CLASS_TEXT, "catdoc", text, b"", 1 if text else 0
     return 0, "", "", b"", 0
 
 
@@ -152,22 +169,26 @@ def zip_project_metadata(path: Path) -> tuple[dict[str, Any], bytes, str]:
 
 
 def classify(path: Path, mime: str) -> tuple[int, str]:
+    # Coarse type -> DCMI Type Vocabulary class. Subject description is NOT
+    # decided here; it goes in the classification text and the machine payload.
     suffix = path.suffix.lower()
     if mime.startswith("image/"):
-        return CLASS_PICTURE, "image"
+        return CLASS_STILL_IMAGE, "image"
+    if mime.startswith("video/"):
+        return CLASS_MOVING_IMAGE, "video"
     if mime.startswith("audio/"):
-        return CLASS_MUSIC, "audio"
+        return CLASS_SOUND, "audio"
     if suffix in {".zip", ".tar", ".gz", ".tgz", ".bz2", ".xz", ".7z"}:
-        return CLASS_ARCHIVE, "archive"
-    if suffix in {".json", ".yaml", ".yml", ".xml"}:
-        return CLASS_METADATA, "metadata"
-    if suffix in {".bin", ".exe", ".dylib", ".so", ".o", ".a"}:
-        return CLASS_SOFTWARE, "software"
-    if suffix in {".safetensors", ".pt", ".pth", ".onnx"}:
-        return CLASS_MODEL, "model"
-    if suffix in {".csv", ".tsv", ".parquet", ".sqlite", ".db"}:
+        return CLASS_COLLECTION, "archive"
+    if suffix in {".json", ".yaml", ".yml", ".xml", ".csv", ".tsv", ".parquet", ".sqlite", ".db"}:
         return CLASS_DATASET, "dataset"
-    return CLASS_SOFTWARE if mime == "application/octet-stream" else CLASS_ARTICLE, "generic"
+    if suffix in {".safetensors", ".pt", ".pth", ".onnx"}:
+        return CLASS_DATASET, "model-weights"
+    if suffix in {".bin", ".exe", ".dylib", ".so", ".o", ".a"} or mime.startswith("application/x-"):
+        return CLASS_SOFTWARE, "software"
+    if mime == "application/octet-stream":
+        return CLASS_UNSPECIFIED, "opaque"
+    return CLASS_TEXT, "generic"
 
 
 def build_card(args: argparse.Namespace) -> tuple[bytes, dict[str, Any]]:
@@ -178,21 +199,34 @@ def build_card(args: argparse.Namespace) -> tuple[bytes, dict[str, Any]]:
     issued = args.card_issued_unix or utc_now()
     work_created = args.work_created_unix if args.work_created_unix is not None else issued
     work_revised = args.work_revised_unix if args.work_revised_unix is not None else issued
+    content_policy = load_content_policy(
+        args.content_policy,
+        name=args.policy_name,
+        allow_text_prefix=bool_override(args.allow_text_prefix, args.no_text_prefix),
+        allow_doc_vector=bool_override(args.allow_doc_vector, args.no_doc_vector or not args.embed),
+        allow_image_thumbnail=bool_override(args.allow_image_thumbnail, args.no_image_thumbnail),
+        allow_ocr=bool_override(args.allow_ocr, args.no_ocr),
+        max_text_prefix_chars=args.max_text_prefix_chars,
+    )
 
     arena_class, handler, text, machine_payload, classification_count = extract_text(path, mime)
     project: dict[str, Any] = {}
     source_or_manifest = b"\0" * 32
     if not handler and zipfile.is_zipfile(path):
         project, manifest_bytes, text = zip_project_metadata(path)
-        arena_class = CLASS_ARCHIVE
+        arena_class = CLASS_COLLECTION
         handler = "clawxiv-zip" if project else "archive"
         if manifest_bytes:
             source_or_manifest = sha256_bytes(manifest_bytes)
 
     if not handler:
         arena_class, handler = classify(path, mime)
-        if arena_class == CLASS_PICTURE:
-            machine_payload = image_payload(path)
+        if arena_class == CLASS_STILL_IMAGE:
+            machine_payload = (
+                image_payload(path, int(content_policy.get("max_image_preview_bytes", 128) or 0))
+                if content_policy.get("allow_image_thumbnail")
+                else b""
+            )
             text = args.abstract or f"Image artefact: {path.name}; MIME {mime}; {len(data)} bytes."
         else:
             text = args.abstract or f"{handler.capitalize()} artefact: {path.name}; MIME {mime}; {len(data)} bytes."
@@ -203,15 +237,22 @@ def build_card(args: argparse.Namespace) -> tuple[bytes, dict[str, Any]]:
     if isinstance(keywords, list):
         keywords = ", ".join(keywords)
     classification = args.classification or project.get("classification") or handler
-    body_text = clean_text(text)
+    full_text = clean_text(text)
+    body_text = clamp_text_prefix(full_text, content_policy)
     segments = TextSegments(title=title, abstract=abstract, keywords=keywords, classification=classification, body=body_text)
 
     embedding = b""
     embedding_profile_id = PROFILE_NONE
     embedding_policy: dict[str, Any] = {"embedding_mode": "none"}
-    if args.embed and arena_class in {CLASS_ARTICLE, CLASS_WEBPAGE, CLASS_METADATA, CLASS_ARCHIVE} and clean_text(text):
-        preimage = embedding_source_text(segments, body_text)
-        embedding, embedding_policy = bge_small_embedding_f16le(preimage, args.embedding_model)
+    if (
+        content_policy.get("allow_doc_vector")
+        and arena_class in {CLASS_TEXT, CLASS_DATASET, CLASS_COLLECTION}
+        and full_text
+    ):
+        # Vector over the full extracted text; the policy clamp only limits
+        # the human-readable prefix stored on the card.
+        preimage = embedding_source_text(segments, full_text)
+        embedding, embedding_policy = document_embedding_f16le(preimage, args.embedding_model)
         embedding_profile_id = embedding_policy["embedding_profile_id"]
         machine_payload = embedding
     elif machine_payload:
@@ -287,9 +328,10 @@ def build_card(args: argparse.Namespace) -> tuple[bytes, dict[str, Any]]:
             "keywords": segments.keywords,
             "classification": segments.classification,
             "body_sha256": sha256_hex(body_text.encode("utf-8")),
-            "embedding_preimage": embedding_source_text(segments, body_text),
+            "embedding_preimage": embedding_source_text(segments, full_text),
         },
         "policy": embedding_policy,
+        "content_policy": content_policy,
     }
     return signed, meta
 
@@ -316,6 +358,17 @@ def main() -> None:
     parser.add_argument("--ipns-name", default="")
     parser.add_argument("--http-hint", default="")
     parser.add_argument("--embedding-model", default=DEFAULT_EMBEDDING_MODEL)
+    parser.add_argument("--content-policy", help="JSON content extraction policy")
+    parser.add_argument("--policy-name")
+    parser.add_argument("--max-text-prefix-chars", type=int)
+    parser.add_argument("--allow-text-prefix", action="store_true")
+    parser.add_argument("--no-text-prefix", action="store_true")
+    parser.add_argument("--allow-doc-vector", action="store_true")
+    parser.add_argument("--no-doc-vector", action="store_true")
+    parser.add_argument("--allow-image-thumbnail", action="store_true")
+    parser.add_argument("--no-image-thumbnail", action="store_true")
+    parser.add_argument("--allow-ocr", action="store_true")
+    parser.add_argument("--no-ocr", action="store_true")
     parser.add_argument("--no-embed", dest="embed", action="store_false")
     parser.set_defaults(embed=True)
     args = parser.parse_args()

@@ -1,0 +1,15 @@
+{
+  "name": "public_library_science",
+  "allow_archive_member_listing": true,
+  "allow_audio_transcript": true,
+  "allow_doc_vector": true,
+  "allow_full_decompress_hash": true,
+  "allow_image_thumbnail": true,
+  "allow_ocr": true,
+  "allow_sample_decompress": true,
+  "allow_text_prefix": true,
+  "allow_video_keyframes": true,
+  "max_image_preview_bytes": 128,
+  "max_text_prefix_chars": 100000,
+  "media_hash_only": false
+}

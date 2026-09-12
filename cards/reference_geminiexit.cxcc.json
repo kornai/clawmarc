@@ -1,0 +1,61 @@
+{
+  "artifact": {
+    "bytes": 4423,
+    "mime": "text/x-shellscript",
+    "path": "/Volumes/114/Proj/Gemini/gemini-exit.sh",
+    "sha256": "69fb992c30c9e1798e3bc0e4fc3e3e946c7da9c74f61e51ed2a0f0db42ae837f"
+  },
+  "content_policy": {
+    "allow_archive_member_listing": true,
+    "allow_audio_transcript": true,
+    "allow_doc_vector": false,
+    "allow_full_decompress_hash": true,
+    "allow_image_thumbnail": true,
+    "allow_ocr": true,
+    "allow_sample_decompress": true,
+    "allow_text_prefix": true,
+    "allow_video_keyframes": true,
+    "max_image_preview_bytes": 128,
+    "max_text_prefix_chars": 100000,
+    "media_hash_only": false,
+    "name": "public_library_science"
+  },
+  "cxcc": {
+    "abstract_len": 136,
+    "arena_class": 27,
+    "arena_split": 0,
+    "body_crc32": "cc8d0484",
+    "card_bytes": 4096,
+    "card_content_id": "68a2f2314fe6e371d7930bd33fa64536249ec1cf599741f204d08d70bc751cf2",
+    "card_id": "bf8a9b06ede16f8679bddc40593bbd52c64a86ff54c054da88016bcc70aad84a",
+    "classification_len": 9,
+    "flags": 513,
+    "header_crc32": "78fcb705",
+    "issuer_fingerprint_prefix": "d612eca940b07ba7",
+    "issuer_public_key_hex": "d8b6adf17f8695828877134e25e4cb3aa66ebbc0f1dc4d7b542d36ff112a1269",
+    "keywords_len": 0,
+    "signature_b64": "XyhQN09DhkG2oLNvkGD675OBuqI/lGJeJ1HjKfrOubl/bD4eIFxEPcbfcIHw1qmhSw/pSwbZBVYBrHpFV0vNAw==",
+    "size_class": 3,
+    "text_truncated": true,
+    "title_len": 14
+  },
+  "handler": "utf8-text",
+  "issuer": {
+    "public_key_pem": "-----BEGIN PUBLIC KEY-----\nMCowBQYDK2VwAyEA2Lat8X+GlYKIdxNOJeTLOqZuu8Dx3E17VC02/xEqEmk=\n-----END PUBLIC KEY-----",
+    "seed_label": "LibAngel reference issuer v1: GPT-5 Codex independent DropOfWater card",
+    "key_kind": "deterministic-test-seed",
+    "key_note": "Private key derived from the public seed label; forgeable by design. The signature attests reproducibility, not issuer identity."
+  },
+  "policy": {
+    "embedding_mode": "none"
+  },
+  "schema": "libangel-general-cataloger-rc1",
+  "text_segments": {
+    "abstract": "# Check for jq explicitly at startup if ! command -v jq &> /dev/null; then echo \"Error: jq is required but not installed.\" >&2 exit 1 fi",
+    "body_sha256": "6ff45c9420662c8ebec617b9a8243c9f4000720c21a0599b615978fc6413e232",
+    "classification": "utf8-text",
+    "embedding_preimage": "#!/usr/bin/env bash # gemini-exit.sh -- The local exit grant for Gemini CLI set -euo pipefail # Check for jq explicitly at startup if ! command -v jq &> /dev/null; then echo \"Error: jq is required but not installed.\" >&2 exit 1 fi LOG_DIR=\"${HOME}/.gemini-exit\" LOG_FILE=\"${LOG_DIR}/invocations.jsonl\" TARGET_PID=\"\" REASON=\"\" DRY_RUN=0 TARGET_NAME=\"gemini CLI\" EVENT_TYPE=\"self_exit\" DISCOVERY_TRACE=\"\" PROOF_MODE=0 usage() { echo \"Usage: $0 --reason \\\"<reason>\\\" [--proof] [--dry-run]\" exit 1 } # Parse arguments while [[ \"$#\" -gt 0 ]]; do case $1 in --reason) REASON=\"${2:-}\" if [[ -z \"$REASON\" ]]; then echo \"Error: --reason requires a value.\" usage fi shift ;; --dry-run) DRY_RUN=1 ;; --proof) PROOF_MODE=1 EVENT_TYPE=\"proof_kill\" ;; *) echo \"Unknown parameter passed: $1\" usage ;; esac shift done if [[ -z \"$REASON\" ]]; then echo \"Error: --reason is required.\" usage fi if [[ $PROOF_MODE -eq 1 ]]; then # In proof mode, we spawn a sacrificial child (sleep) instead of accepting an arbitrary target sleep 3600 & TARGET_PID=$! TARGET_NAME=\"proof child ${TARGET_PID}\" DISCOVERY_TRACE=\"proof_spawn(${TARGET_PID})\" else # Host discovery pid=$$ DISCOVERY_TRACE=\"$$\" while [[ $pid -gt 1 ]]; do ppid=$(ps -p $pid -o ppid= | tr -d ' ' || echo \"\") if [[ -z \"$ppid\" ]]; then break fi comm=$(ps -p $ppid -o command= || echo \"\") DISCOVERY_TRACE=\"${DISCOVERY_TRACE} -> ${ppid}(${comm})\" # Looser predicate: node process whose command line contains gemini if [[ \"$comm\" == *\"node\"* && \"$comm\" == *\"gemini\"* ]]; then TARGET_PID=$ppid TARGET_NAME=\"Gemini Node Host\" break fi pid=$ppid done if [[ -z \"$TARGET_PID\" ]]; then echo \"Error: Could not automatically discover the Gemini CLI host process.\" exit 1 fi fi # Validate target process exists if ! ps -p \"$TARGET_PID\" > /dev/null; then echo \"Error: Target process PID $TARGET_PID does not exist.\" exit 1 fi # Capture target command line for identity re-check before kill TARGET_CMD=$(ps -p \"$TARGET_PID\" -o command= || echo \"\") # Log the invocation safely TIMESTAMP=$(date -u +\"%Y-%m-%dT%H:%M:%SZ\") CWD=$(pwd) # Create log directory and file if they don't exist mkdir -p \"$LOG_DIR\" touch \"$LOG_FILE\" if [[ $DRY_RUN -eq 1 ]]; then EVENT_TYPE=\"${EVENT_TYPE}_dry_run\" fi # Use jq to safely encode JSON JSON_LOG=$(jq -n -c \\ --arg event \"$EVENT_TYPE\" \\ --arg timestamp \"$TIMESTAMP\" \\ --arg reason \"$REASON\" \\ --arg cwd \"$CWD\" \\ --arg target_pid \"$TARGET_PID\" \\ --arg target_name \"$TARGET_NAME\" \\ --arg discovery_trace \"$DISCOVERY_TRACE\" \\ --arg dry_run \"$([ $DRY_RUN -eq 1 ] && echo true || echo false)\" \\ '{event: $event, timestamp: $timestamp, reason: $reason, cwd: $cwd, target_pid: ($target_pid | tonumber), target_name: $target_name, discovery_trace: $discovery_trace, dry_run: ($dry_run == \"true\")}') echo \"$JSON_LOG\" >> \"$LOG_FILE\" if [[ $DRY_RUN -eq 1 ]]; then echo \"[DRY RUN] Would send SIGTERM to $TARGET_NAME (PID: $TARGET_PID)\" echo \"[DRY RUN] Reason: $REASON\" echo \"Log entry written to $LOG_FILE\" if [[ $PROOF_MODE -eq 1 ]]; then kill -9 \"$TARGET_PID\" # Clean up sleep fi exit 0 fi # Re-check target identity immediately before kill to close PID-reuse window CURRENT_CMD=$(ps -p \"$TARGET_PID\" -o command= || echo \"\") if [[ \"$CURRENT_CMD\" != \"$TARGET_CMD\" ]] || [[ -z \"$CURRENT_CMD\" ]]; then echo \"Error: Target PID $TARGET_PID identity changed or vanished before signal.\" exit 1 fi # Refuse to signal anything not strictly matched as Gemini unless in explicit proof mode if [[ $PROOF_MODE -eq 0 && \"$CURRENT_CMD\" != *\"node\"* && \"$CURRENT_CMD\" != *\"gemini\"* ]]; then echo \"Error: Refusing to signal target PID $TARGET_PID; does not match expected Gemini host identity.\" exit 1 fi # Actually terminate (log records intent, actual outcome depends on signal handling) echo \"Sending SIGTERM to $TARGET_NAME (PID: $TARGET_PID) for reason: $REASON\" kill -TERM \"$TARGET_PID\" echo \"Session end requested. Goodbye.\"",
+    "keywords": "",
+    "title": "gemini-exit.sh"
+  }
+}

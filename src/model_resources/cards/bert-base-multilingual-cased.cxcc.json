@@ -1,0 +1,55 @@
+{
+  "artifact": {
+    "bytes": 663586633,
+    "path": "/Volumes/114/Proj/Paper/clawmarc/src/model_resources/archives/bert-base-multilingual-cased.tar.zst",
+    "sha256": "e6b69b84dcddbccc09da5f433cd816ebab5d9ed55d4ccf06f3103eeebcf2defa"
+  },
+  "cxcc": {
+    "abstract_len": 186,
+    "arena_class": 24,
+    "arena_split": 0,
+    "body_crc32": "f44bf204",
+    "card_bytes": 4096,
+    "card_content_id": "c73ab4aeccec1c2421ad509f97fbd73ee0a8ee7b1a6376089d43f5a5ad2f1bb4",
+    "card_id": "ad4a6824cb864f613a31cdeeae257a2d51905594533a22bcab056623900f569c",
+    "classification_len": 47,
+    "flags": 45,
+    "header_crc32": "6dcba7da",
+    "issuer_fingerprint_prefix": "9d3f5a3fd1b75817",
+    "issuer_public_key_hex": "9451c0b34787458925b7915e837871f3edc324df7b6f6adbd5f9f659e2ae9118",
+    "keywords_len": 71,
+    "signature_b64": "1aCJohUnvrP2SVvOLakIsLg/nrMeAvdmOoOlayQD9Ju3YUsjx/TrEKFcYkK1TB1hevtVpHqQtBskte5Go+NZDg==",
+    "size_class": 4,
+    "text_truncated": false,
+    "title_len": 81
+  },
+  "embedding": {
+    "present": false,
+    "profile_id": 0,
+    "reason": "opaque binary artifact"
+  },
+  "issuer": {
+    "key_kind": "deterministic-test-seed",
+    "key_note": "Private key is derived from the public seed label and is forgeable by design; the signature attests reproducibility, not issuer identity.",
+    "public_key_pem": "-----BEGIN PUBLIC KEY-----\nMCowBQYDK2VwAyEAlFHAs0eHRYklt5Feg3hx8+3DJN97b2rb1fn2WeKukRg=\n-----END PUBLIC KEY-----",
+    "seed_label": "clawmarc model resource issuer v1"
+  },
+  "locators": {
+    "http_hint": "https://lebadus.ai/Resources/Models/bert-base-multilingual-cased.tar.zst",
+    "http_mirrors": [
+      "https://lebadus.ai/Resources/Models/bert-base-multilingual-cased.tar.zst"
+    ],
+    "ipfs_cid": "bafybeifcdyij2s76mjyq4dz6ewhylshabirarix3hlpssm2az2ll6qdozy",
+    "swarm_reference": "8d37f0629330e85531c4538713a5d09d32438b7c7ded3b142348af555a1703fc"
+  },
+  "model": "bert-base-multilingual-cased",
+  "readme_sha256": "55f427587d873806c7bd3fc20463cafffd24d44ba56213453f5c8120aab14275",
+  "schema": "clawmarc-opaque-model-card-v1",
+  "text": {
+    "abstract": "Opaque binary release of bert-base-multilingual-cased, archived as bert-base-multilingual-cased.tar.zst. The card binds the exact archive bytes by SHA-256; it carries no document vector.",
+    "classification": "software; machine-learning model; opaque binary",
+    "keywords": "embedding model, bert-base-multilingual-cased, model archive, retrieval",
+    "readme": "Model resource: bert-base-multilingual-cased. This archive contains the complete locally cached model directory, including configuration, tokenizer, and weight files. No model README was present in the local directory.",
+    "title": "bert-base-multilingual-cased model archive (bert-base-multilingual-cased.tar.zst)"
+  }
+}

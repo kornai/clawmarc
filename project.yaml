@@ -1,0 +1,166 @@
+# ClawXiv project metadata — canonical, hand-maintained
+schema_version: 1
+slug: clawmarc
+title: 'The 4096-byte catalog card: fixed-size, signed, content-bound description for archives that machines read'
+format_name: clawmarc          # public name of the format; wire magic stays CXCC
+root_tex: clawmarc.tex        # clawxiv-ready prong (joint authorship)
+submit_tex: clawmarc_wadl.tex # reviewer-facing prong (AK sole author, AI in acknowledgments)
+bib: clawmarc.bib
+status: draft
+version: v1.rc3
+created: 2026-09-07
+layout_version: '1.3'   # arena_class 16-27 = DCMI Type Vocabulary (AK ruling 2026-09-07)
+
+venue:
+  name: 'Web Archiving and Digital Libraries Workshop (WADL 2026), with JCDL 2026'
+  place: 'Dallas, TX, USA (hybrid)'
+  date: 2026-10-16
+  deadline: 2026-09-16
+  notification: 2026-10-01
+  portal: 'https://easychair.org/conferences/?conf=wadl2026'
+  cfp: 'https://wadlworkshop.github.io/2026/content/0-cfp/'
+  type: 'short paper (2+ pages, ACM sigconf)'
+
+spec:
+  internet_draft: draft-kornai-clawmarc-00
+  datatracker: 'https://datatracker.ietf.org/doc/draft-kornai-clawmarc/'
+  uploaded: 2026-06-24
+  expires: 2026-12-25
+  ise_outcome: 'declined for the Independent Submission stream (Eliot Lear, ISE); state change on Datatracker 2026-09-01'
+  staged_revision: draft-kornai-clawmarc-02 (layout 1.3, DCMI classes; not uploaded)
+  github: 'https://github.com/kornai/clawmarc'   # still at layout 1.2 — push after AK review
+
+origin: >
+  Split off 2026-09-07 from ~/Proj/SW/ClawXiv/clawmarc (public bundle rc1,
+  2026-06-23) and ~/Proj/SW/ClawXiv/clawmarc-github (GitHub checkout with
+  draft -01 and LibAngel policy hooks, 2026-06-28). Originals left in place.
+  Design history: ClawXiv Blackboard (rfc/RFC_CXCC_0001*), LibAngel Blackboard
+  (2026-06-22/23 differential test, rc1 layout, RFC submission plans).
+
+bundle_convention: >
+  The project directory IS the bundle layout; releases are tarball snapshots
+  generated at signing time (recipe in README.md). No standing staging copy.
+  MANIFEST.sha256 exists only inside snapshots.
+
+two_prong_convention: >
+  Reviewer-facing (clawmarc_wadl.tex, acmart, BibTeX ACM-Reference-Format as
+  acmart requires) and clawxiv-ready (clawmarc.tex, clawxiv.sty, biblatex)
+  TeX are separate parallel files, synced by hand. Never refactor into shared
+  \input bodies.
+
+versioning_convention: >
+  Internal review candidates: vN.rcM (provenance-logged, not pushed publicly).
+  Clean major label vN assigned only after all parties sign the bundle.
+
+authors:
+  - 'András Kornai'
+  - 'Claude Fable 5.1 (Anthropic)'
+
+ai_authors:
+  - 'Claude Fable 5.1 (Anthropic)'
+
+# Contributors to the format and reference implementation (not paper authors):
+contributors:
+  - name: 'GPT-5 Codex (OpenAI)'
+    role: 'spec drafting (r1), LibAngel reference producer, independent implementation in the differential test, adversarial review'
+  - name: 'Claude Opus 4.8 (Anthropic)'
+    role: 'spec drafting, rc1 layout and C header, independent implementation in the differential test, adversarial review, Independent Submission plan'
+  - name: 'Eliot Lear (RFC Independent Submissions Editor)'
+    role: 'reviewed and declined draft -00; objections structure §§3–6 of the paper; acknowledged by name'
+
+responsible_author: 'András Kornai'
+responsible_author_orcid: '0000-0001-6078-6840'
+
+changelog:
+  - date: 2026-09-07
+    by: 'Claude Fable 5.1 (CLI)'
+    what: >
+      Bundle created under ~/Proj/Paper/. Spec (-00, -01), reference code,
+      cards, ISE-era notes copied in. Lear exchange and WADL CFP recorded on
+      the Blackboard. Bibliography built (15 entries, all verified and
+      archived in ~/Other/Paper; ml.bib url for Kornai:2026a corrected from
+      2604.16479 to 2604.16476). WADL prong drafted: intro (card catalog →
+      MARC → machine-written description), card design, four sections
+      answering Lear's objections (fixed size; machine payload / multiple
+      selectors; classes not subject codes; registry — conceded in part,
+      Memento precedent noted), implementation + differential test with the
+      measured cosines (0.9999999999 / 0.989 / 0.932), publication posture,
+      honest scale statement (batch machinery staged, not run), related work.
+  - date: 2026-09-07
+    by: 'Claude Fable 5.1 (CLI)'
+    what: >
+      v1.rc2 after the referee-report draft (Blackboard/wadl_referee_report_draft.md)
+      and AK rulings: (1) stay a short paper; (2) ISE framing removed — design
+      presented on its own terms, Lear thanked neutrally; (3) arena_class 16-27
+      now the DCMI Type Vocabulary (layout 1.3): header, libangel_card.py,
+      libangel_catalog.py, libangel_mint.py changed; spec draft -02 derived;
+      both reference cards re-minted (old ones in Attic/cards_layout_1.2/);
+      (4) new sections on embedding-profile obsolescence, format migration
+      (BagIt), Linked Data / JSON-LD / schema.org / Signposting; (5) pilot on
+      ~/Other/Paper/Pdf rerun with a real PDF branch after Gemini's 16:38 run
+      was found to have embedded placeholder strings — numbers in
+      Blackboard/pilot_run_20260907.{md,json}; (6) cards/README.md rewritten
+      to AK's June ruling (no 0.95 threshold). Concurrent-edit incident with
+      the live Gemini session recorded in Blackboard/CLAUDE_TO_GEMINI_layout13_20260907.md.
+  - date: 2026-09-11
+    by: 'Claude Opus 4.8 (app)'
+    what: >
+      Model-resource root cards finalized. The four opaque model archives
+      (bge-small-en-v1.5, bert-base-multilingual-cased,
+      paraphrase-multilingual-mpnet-base-v2, xlm-roberta-base) pushed to IPFS
+      (CIDs in src/model_resources/IPFS_CIDS.tsv) and Swarm (references in the
+      new src/model_resources/SWARM_REFS.tsv; depth-24 immutable batch,
+      ~3.0-year TTL). All four re-minted by src/mint_model_cards.py so each
+      signed card now carries three locators for the identical bytes — HTTPS
+      hint, IPFS CIDv1, Swarm reference (presence flags 45). kornai.homeip.net
+      dropped as an authentic HTTPS source (unreliable storage; the /4tssd SSD
+      faulted mid-transfer); lebadus.ai is the sole HTTPS mirror. These are the
+      root cards for the models; earlier draft cards superseded. Cross-route
+      byte-identity (project = lebadus = IPFS = Swarm) verified against
+      SHA256SUMS. CARD_INDEX.md regenerated (new card IDs, locator table,
+      embedding-profile status: bge=1, mBERT=2, mpnet=3; xlm-roberta no profile,
+      reference-only). model_resources/README.md updated.
+  - date: 2026-09-11
+    by: 'Claude Fable 5.1 (app)'
+    what: >
+      v1.rc3 — major rewrite of the WADL prong after the adversarial review
+      Blackboard/wadl_referee_report_codex_20260911.md. (1) ACM reference strip
+      restored (printacmref=true, empty DOI/ISBN). (2) Bundle/repository state
+      stated honestly: Datatracker = -00 (layout 1.2), GitHub = historical
+      snapshot, the deposited v1.rc3 bundle is normative. (3) Model root cards
+      re-minted a third time so their schema digest binds the C header
+      (1dfaee46…) like the reference cards, not draft-02.md; card IDs now
+      bge 1a5be0ef…, mBERT ad4a6824…, mpnet d7db5051…, xlm 356ccdf0….
+      (4) Signer: libangel_mint.py gained --issuer-key-file (PEM Ed25519
+      release key); both minters label sidecars key_kind =
+      deterministic-test-seed with a forgeability note; the paper's new
+      §Trust, keys, and admission states the trust model, rotation,
+      revocation, admission, and who assigns profile numbers. (5) Manifest
+      binding language corrected: policy lives in the sidecar; manifest
+      digest is zero unless a manifest is supplied (model cards bind a
+      two-field model/archive record). (6) Fixed-size claims recast as
+      affordances/hypotheses; the "separate indexing layer" overclaim removed;
+      raw-card vs SQLite/NumPy benchmark listed as future work. (7) Results
+      table with query counts; NewReuters metrics named proxy-MAP/proxy-P@10
+      throughout; "common similarity" marked a hypothesis; single-run caveat.
+      (8) Reproducibility declaration: layout, schema/header digest, all six
+      card IDs, runtime versions, hardware, chunking, seeds, result-file and
+      script digests; model publication at lebadus described as staged until
+      SHA256SUMS + cards are verified there. (9) Comparison table (Dublin
+      Core/OAI-PMH, JSON-LD/schema.org, Signposting, WARC, Memento, BagIt).
+      (10) XLM-R cited (Conneau:2020b — Conneau:2020 in ml.bib is a different
+      paper); the four checkpoints cited as Hugging Face model cards pinned by
+      safetensors digest (BAAI:2023, Google:2019, Reimers:2021,
+      FacebookAI:2019), added to ml.bib. (11) validate_clawmarc_repo.sh
+      retired to Attic/scripts_historical/. PUBLISH_MANIFEST.md added for the
+      HTTPS endpoint. Clawxiv prong hand-synced (article class, 15 pp;
+      Provenance section extended with the 09-10/11 events). Spec: draft -02
+      registry now lists profiles 1-3 with MBERT/MPNET informative references
+      (.md and .xml edited in parallel by hand — kramdown-rfc absent — and
+      .txt/.html re-rendered with xml2rfc 3.34.0; draft date bumped to
+      2026-09-11). The two reference-card sidecars gained the same
+      key_kind/key_note labels as the model cards (metadata only; card bytes
+      and IDs d71d5da6…/bf8a9b06… unchanged). WADL prong: 8 pp, 0 errors, 0
+      undefined, 0 class warnings; clawxiv prong 15 pp, clean (biber's
+      universal binary fails under the tool sandbox — the arm64 slice was
+      extracted by hand to build it).

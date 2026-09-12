@@ -31,24 +31,41 @@ SIGNATURE_OFFSET = 0x0D0
 SIGNATURE_BYTES = 64
 
 LAYOUT_MAJOR = 1
-LAYOUT_MINOR = 2
+LAYOUT_MINOR = 3  # 1.3: arena_class 16-27 = DCMI Type Vocabulary
 
-CLASS_CATALOG_OBJECT = 0
+# arena_class: 0 = no class asserted; 1-2 clawmarc structural (card
+# concatenations); 3-15 reserved; 16-27 the DCMI Type Vocabulary in its
+# alphabetical order (http://purl.org/dc/dcmitype/); 28-255 unassigned.
+CLASS_UNSPECIFIED = 0
 CLASS_INDIRECT_CATALOG_CARD = 1
 CLASS_DOUBLY_INDIRECT_CATALOG_CARD = 2
-CLASS_ARTICLE = 16
-CLASS_BOOK = 17
-CLASS_PICTURE = 18
-CLASS_MOVIE = 19
-CLASS_MUSIC = 20
-CLASS_SOFTWARE = 21
-CLASS_DATASET = 22
-CLASS_MAP = 23
-CLASS_METADATA = 24
-CLASS_SEQUENCE = 25
-CLASS_MODEL = 26
-CLASS_WEBPAGE = 27
-CLASS_ARCHIVE = 28
+CLASS_COLLECTION = 16            # dcmitype:Collection
+CLASS_DATASET = 17               # dcmitype:Dataset
+CLASS_EVENT = 18                 # dcmitype:Event
+CLASS_IMAGE = 19                 # dcmitype:Image (superclass of 21, 26)
+CLASS_INTERACTIVE_RESOURCE = 20  # dcmitype:InteractiveResource
+CLASS_MOVING_IMAGE = 21          # dcmitype:MovingImage
+CLASS_PHYSICAL_OBJECT = 22       # dcmitype:PhysicalObject
+CLASS_SERVICE = 23               # dcmitype:Service
+CLASS_SOFTWARE = 24              # dcmitype:Software
+CLASS_SOUND = 25                 # dcmitype:Sound
+CLASS_STILL_IMAGE = 26           # dcmitype:StillImage
+CLASS_TEXT = 27                  # dcmitype:Text
+
+DCMI_TYPE_URIS = {
+    CLASS_COLLECTION: "http://purl.org/dc/dcmitype/Collection",
+    CLASS_DATASET: "http://purl.org/dc/dcmitype/Dataset",
+    CLASS_EVENT: "http://purl.org/dc/dcmitype/Event",
+    CLASS_IMAGE: "http://purl.org/dc/dcmitype/Image",
+    CLASS_INTERACTIVE_RESOURCE: "http://purl.org/dc/dcmitype/InteractiveResource",
+    CLASS_MOVING_IMAGE: "http://purl.org/dc/dcmitype/MovingImage",
+    CLASS_PHYSICAL_OBJECT: "http://purl.org/dc/dcmitype/PhysicalObject",
+    CLASS_SERVICE: "http://purl.org/dc/dcmitype/Service",
+    CLASS_SOFTWARE: "http://purl.org/dc/dcmitype/Software",
+    CLASS_SOUND: "http://purl.org/dc/dcmitype/Sound",
+    CLASS_STILL_IMAGE: "http://purl.org/dc/dcmitype/StillImage",
+    CLASS_TEXT: "http://purl.org/dc/dcmitype/Text",
+}
 
 SIZE_EMPTY = 0
 SIZE_64BIT = 1
@@ -78,6 +95,8 @@ FLAG_ISSUER_CARD_REF_PRESENT = 1 << 10
 
 PROFILE_NONE = 0
 PROFILE_BGE_SMALL_EN_V1_5_F16_384 = 1
+PROFILE_MBERT_CASED_F16_768 = 2
+PROFILE_MPNET_MULTILINGUAL_F16_768 = 3
 
 
 def sha256_bytes(data: bytes) -> bytes:
