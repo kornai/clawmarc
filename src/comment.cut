@@ -1,4 +1,5 @@
-We thank Eliot Lear (Cisco) for penetrating criticism of an earlier draft.
+An NVIDIA academic hardware grant on Local Index Language Modeling is gratefully
+acknowledged. We thank Eliot Lear (Cisco) for penetrating criticism of an earlier draft.
 The specification and the reference implementation were developed with
 substantive assistance from GPT-5 Codex (OpenAI) and Claude Opus (Anthropic),
 including independent implementations of the differential test; Gemini 3.1

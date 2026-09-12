@@ -178,4 +178,13 @@ changelog:
       Both prongs updated (IDs; "served from two independent HTTPS sources";
       no longer "staged"); Datatracker/I-D revision narrative removed per AK.
       CARD_INDEX.md, PUBLISH_MANIFEST.md regenerated; LICENSE (MIT) added to
-      the bundle root.
+      the bundle root. After AK's read: affiliation now SZTAKI + BME; NVIDIA
+      academic hardware grant (Local Index Language Modeling) acknowledged;
+      new portability paragraph in §Fixed size (integer-only card tools, no
+      FPU, 32-bit machines; profile 0 = no vector as the smallest-machine
+      tier; profile 1 sized for Raspberry Pi / Jetson Nano; C core minter
+      planned) with a matching future-work clause; roadmap, conclusion,
+      captions, and three future-work paragraphs tightened and the digest
+      notes dropped from the four Hugging Face bib entries so the WADL prong
+      fits in 7 pages (AK's ceiling). Clawxiv prong hand-synced, with an
+      Acknowledgments paragraph.

@@ -1,0 +1,798 @@
+%% clawmarc_wadl.tex — reviewer-facing prong for WADL 2026 (ACM sigconf).
+%% Sole author: A. Kornai; AI assistance in Acknowledgments (ACM policy).
+%% Parallel file: clawmarc.tex (clawxiv-ready prong, joint authorship).
+%% The two are synced BY HAND; never refactor into shared \input bodies.
+%% v1.rc2 (2026-09-07): restructured after the referee-report draft; DCMI classes; pilot.
+%% v1.rc3 (2026-09-11): rewritten after the adversarial review of 2026-09-11 —
+%%   ACM reference strip restored; bundle/repository state stated honestly;
+%%   model root cards; trust model and test-key labelling; manifest-binding
+%%   language corrected; fixed-size claims marked as hypotheses; results table
+%%   with query counts, proxy-MAP named as such; reproducibility declaration;
+%%   comparison table; XLM-R and the four checkpoints cited exactly.
+\documentclass[sigconf]{acmart}
+
+\setcopyright{none}
+\settopmatter{printacmref=true}
+\acmDOI{}
+\acmISBN{}
+\renewcommand\footnotetextcopyrightpermission[1]{}
+\acmConference[WADL 2026]{Web Archiving and Digital Libraries Workshop}{October 16, 2026}{Dallas, TX, USA}
+\acmYear{2026}
+\copyrightyear{2026}
+
+\usepackage{booktabs}
+
+\begin{document}
+
+\title{The 4096-byte catalog card: fixed-size, signed, content-bound description for archives that machines read}
+
+\author{Andr\'as Kornai}
+\orcid{0000-0001-6078-6840}
+\email{kornai@sztaki.hu}
+\affiliation{%
+  \institution{SZTAKI Institute for Computer Science and Control}
+  \city{Budapest}
+  \country{Hungary}
+}
+
+\begin{abstract}
+We describe clawmarc, a catalog card for digital artefacts that is exactly
+4096 bytes long, binds by SHA-256 to the bytes it describes, carries a short
+human-readable description alongside a machine-readable search payload,
+records retrieval hints for several storage backends, and carries an Ed25519
+signature. The card is a descriptor, not a proof of authenticity or
+availability, and it is meant to live separate from the artefact; its
+artefact classes are the twelve terms of the DCMI Type Vocabulary, and subject
+description is left to the schemes a cataloger already uses. We give the
+design and its rationale, state the trust model under which a signature means
+anything, place the card against MARC, Dublin Core, Linked Data, WARC,
+Memento, and BagIt, and report what has been built: a specification with a C
+reference layout, a Python producer and inspector, reference cards, cards
+that pin the exact embedding models the format names, a differential test in
+which two independent implementations produced byte-identical cards on every
+pinned field, and retrieval experiments on a judged collection and a
+topic-proxy collection. The experiments do not propose a retrieval method;
+they ask whether a fixed card can carry representations from models with
+materially different behaviour while keeping one catalog interface. The
+contribution claimed is a substrate, and its costs and open questions are
+stated with it.
+\end{abstract}
+
+\begin{CCSXML}
+<ccs2012>
+<concept>
+<concept_id>10002951.10003317.10003318</concept_id>
+<concept_desc>Information systems~Document representation</concept_desc>
+<concept_significance>500</concept_significance>
+</concept>
+<concept>
+<concept_id>10002951.10003317.10003338</concept_id>
+<concept_desc>Information systems~Retrieval models and ranking</concept_desc>
+<concept_significance>300</concept_significance>
+</concept>
+<concept>
+<concept_id>10002951.10003227.10003392</concept_id>
+<concept_desc>Information systems~Digital libraries and archives</concept_desc>
+<concept_significance>500</concept_significance>
+</concept>
+</ccs2012>
+\end{CCSXML}
+\ccsdesc[500]{Information systems~Digital libraries and archives}
+\ccsdesc[500]{Information systems~Document representation}
+\ccsdesc[300]{Information systems~Retrieval models and ranking}
+
+\keywords{catalog card, content addressing, metadata, fixed-size records, embeddings, DCMI Type Vocabulary, web archiving, interoperability}
+
+\maketitle
+
+\section{Introduction}
+
+For about a century the unit of the library catalog was a card of
+$7.5 \times 12.5$ centimetres. Its virtues were not typographic. A drawer of
+cards could be counted, its space planned, a card pulled without disturbing its
+neighbours, and a set of cards from one library merged into the drawers of
+another; the Library of Congress sold printed cards precisely because every
+recipient's drawers were the same size. The card did not need to be as long as
+the book; it needed to be long enough to say what the book was, where it stood,
+and who had described it. Krajewski's history of the format traces how much
+intellectual infrastructure rested on that one fixed dimension
+\cite{Krajewski:2011}.
+
+MARC replaced the card with a variable-length record \cite{Avram:1975}, and
+every later interchange format, from Dublin Core \cite{Kunze:2007} to OAI-PMH
+\cite{Lagoze:2001} to the graph serializations of Linked Data
+\cite{Kellogg:2020}, followed it in letting the record grow to fit the
+description. This was the right choice for records that skilled catalogers
+write and databases hold. Its suitability is less clear for the situation now
+facing digital libraries and web archives: artefacts produced in volumes that
+no cataloging staff can describe, a growing share of them produced by, or with,
+language models; storage replicated across mirrors, institutional
+repositories, and content-addressed peer-to-peer networks
+\cite{Benet:2014,Alam:2016}; and description increasingly performed by machines
+for machines, with the human reading a card only after a search has already
+ranked it.
+
+This paper describes a catalog card designed for that situation. A clawmarc
+card is exactly 4096 bytes. It binds to the bytes of the artefact it describes
+by SHA-256, so that a later copy found anywhere can be checked against it. It
+carries a short human-readable description (title, abstract, keywords,
+classification, and as much body prefix as fits) and, in the same card, a
+machine-readable payload, in the default profile a 768-dimensional document
+vector. It records retrieval hints for HTTP, IPFS, IPNS, and Swarm, and it
+carries an Ed25519 signature \cite{Josefsson:2017} whose meaning depends on
+how the signing key was published, a point Section~\ref{sec:trust} takes up.
+It is a descriptor, not a certificate of authenticity, availability, or
+quality; it is intended to remain useful even when the artefact is no longer
+available.
+
+The format grew out of ClawXiv, an archival workflow for research produced
+jointly by humans and language models \cite{Kornai:2026a}, where the need to
+catalog machine-produced bundles at machine speed was felt early.
+Section~\ref{sec:card} states the design. Section~\ref{sec:rationale} gives
+the reasons for its main choices, including the ones that run against current
+practice, and states the trust model. Section~\ref{sec:related} places the
+card among the formats already in broad currency. Section~\ref{sec:impl}
+reports what has been built and measured, with a reproducibility declaration,
+and Section~\ref{sec:governance} lays out what remains, most of it
+experimental.
+
+\section{The card}
+\label{sec:card}
+
+\subsection{Layer model}
+
+Three layers are kept apart. The \emph{card} is the 4096-byte descriptor. The
+\emph{artefact} is the thing described. The \emph{catalog} is a collection of
+cards together with indices, shards, heads, admission policy, and governance.
+The format specifies only the first. A card can outlive its artefact;
+authenticity and availability are resolved at the artefact and catalog layers.
+This separation is what allows the card to be storage-neutral: cards and
+artefacts may travel over local filesystems, HTTP mirrors, IPFS, Swarm, or an
+institutional repository, and the card neither knows nor cares which.
+
+\subsection{Layout}
+
+The card is divided into a 1216-byte header of fixed-position fields, a
+2816-byte \emph{arena} whose interpretation depends on the artefact class, and a
+64-byte footer holding two CRC-32 checks. Table~\ref{tab:layout} summarizes the
+header. Every multi-byte field lies on its natural alignment boundary; the
+reference C structure compiles to exactly 4096 bytes with no padding and is
+nevertheless declared packed, with compile-time assertions on the total size
+and on the offsets of the fields most likely to drift, so that the wire layout
+cannot silently change across compilers or across edits.
+
+\begin{table}[t]
+\caption{Header fields, in wire order (offsets in hex; the arena occupies
+0x4c0--0xfbf, the footer 0xfc0--0xfff).}
+\label{tab:layout}
+\footnotesize
+\begin{tabular}{@{}rrp{0.66\columnwidth}@{}}
+\toprule
+offset & size & field \\
+\midrule
+000 & 8   & magic \texttt{CXCC}, layout major/minor \\
+008 & 8   & arena split, arena class, size class, flags \\
+010 & 32  & card issued, work created, work revised, sequence \\
+030 & 128 & schema, object, manifest, previous-card SHA-256 \\
+0b0 & 96  & issuer public key, card signature (Ed25519) \\
+110 & 132 & issuer card reference; access mode, encryption profile, key \\
+194 & 88  & responsible ORCID; author, classification, URL counts; author digests \\
+1ec & 8   & license identifier \\
+1f4 & 272 & Swarm reference, IPFS CID, IPNS name, HTTP hint, locator-set digest \\
+304 & 76  & embedding profile, four text lengths, text flags, text and embedding digests \\
+350 & 32  & target card (bounded indirection) \\
+370 & 336 & reserved (zero) \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{Bindings}
+\label{sec:bindings}
+
+Four digests tie the card to the world. The \emph{object} digest is the SHA-256
+of the artefact bytes: the card says ``I describe these bytes,'' and any later
+copy can be checked. The \emph{schema} digest identifies the normative layout
+the producer followed; in every card published with this paper it is the
+SHA-256 of the reference C header, so a consumer knows which layout it is
+reading. The \emph{manifest} digest is optional: when the producer supplies a
+manifest (a build record, a source listing, a migration record, or, for the
+model cards of Section~\ref{sec:profiles}, a two-field record naming the
+model and its archive) the digest binds it, and when no manifest is supplied
+the field is zero and nothing further is bound. The \emph{previous-card}
+digest forms a supersession chain when a card is reissued. None of these is a
+proof of authenticity: a valid signature proves only that the holder of a key
+made a signed statement about an object hash, and what the key stands for is
+a question the card cannot answer by itself.
+
+\subsection{The arena}
+
+The arena is split at a producer-chosen offset into a machine payload and a
+human text. For text artefacts the payload, when present, is a document vector
+under a named \emph{embedding profile}. Three profiles are assigned:
+profile~1 is the 384-dimensional English-language \nolinkurl{bge-small-en-v1.5}
+checkpoint \cite{BAAI:2023,Xiao:2023}, stored as little-endian binary16 in
+768 bytes; profiles~2 and~3 are the 768-dimensional multilingual
+\nolinkurl{bert-base-multilingual-cased} \cite{Google:2019,Devlin:2019} and
+\nolinkurl{paraphrase-multilingual-mpnet-base-v2} \cite{Reimers:2021,Reimers:2020},
+1536 bytes in the same encoding, leaving 1280 bytes for text; profile~2 is
+the default. Against profile~1 the trade is deliberate: half the
+human-readable prefix buys a vector that serves the multilinguality of any
+larger archive. A fourth model, the untuned \texttt{xlm-roberta-base}
+\cite{FacebookAI:2019,Conneau:2020b}, was evaluated alongside these and is
+archived with them for comparison; no profile is assigned to it, for the
+reason Section~\ref{sec:impl} reports. The human text holds title, abstract,
+keywords, classification, and whatever prefix of the body fits; a digest over
+the full used text and a truncation flag make the cut explicit. The
+classification field is free text and is where a producer writes whatever
+subject scheme it uses: a Library of Congress class, a Dewey number, an arXiv
+category, a schema.org type, or a JSON-LD fragment. For images the payload may
+be a small visual reduction and the text a caption. For opaque artefacts the
+split is zero and the text is a category descriptor; a producer must not
+fabricate a document vector for bytes that contain no running text.
+
+\subsection{Classes}
+\label{sec:classes}
+
+The one-byte \emph{arena class} names what kind of thing is described. It is a
+type, not a subject: the distinction an operating system draws between text,
+image, executable, and archive, not the distinction a classification scheme
+draws between endocrinology and epidemiology. Rather than mint such a
+vocabulary, the format reuses one the profession already maintains.
+Values 16--27 are the twelve classes of the DCMI Type Vocabulary
+\cite{DCMI:2020}, assigned in the alphabetical order of that vocabulary
+(Table~\ref{tab:classes}), so that the URI of a class is recoverable from its
+number. Value 0 means no class asserted. Values 1 and 2 are structural and
+belong to the format: an \emph{indirect} card describes an artefact that is
+itself a concatenation of cards, readable at 4096-byte stride, and a
+\emph{doubly indirect} card describes a concatenation of indirect cards.
+Consumers descend at most two levels; this is aggregation with a bounded
+depth, and it is how a catalog shards a million cards into a few hundred
+artefacts without inventing a container format. Values 3--15 are reserved to
+the format and 28--255 are unassigned.
+
+\begin{table}[t]
+\caption{Arena class values. DCMI terms carry the URI prefix
+\texttt{http://purl.org/dc/dcmitype/}.}
+\label{tab:classes}
+\footnotesize
+\begin{tabular}{@{}rl@{\hspace{1.5em}}rl@{}}
+\toprule
+0 & no class asserted        & 16 & Collection \\
+1 & indirect (cards)         & 17 & Dataset \\
+2 & doubly indirect          & 18 & Event \\
+3--15 & reserved (structural) & 19 & Image \\
+28--255 & unassigned         & 20 & InteractiveResource \\
+      &                      & 21 & MovingImage \\
+      &                      & 22 & PhysicalObject \\
+      &                      & 23 & Service \\
+      &                      & 24 & Software \\
+      &                      & 25 & Sound \\
+      &                      & 26 & StillImage \\
+      &                      & 27 & Text \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\section{Design rationale}
+\label{sec:rationale}
+
+\subsection{Fixed size}
+\label{sec:fixed}
+
+The fixed size is a design choice, and the case for it is a case about
+catalog operations rather than about parser performance. The operations are
+these. A shard of cards can be addressed by ordinal, memory-mapped, and
+scanned at constant stride. A consumer can reject a record whose length is
+not 4096 bytes before parsing any field, and a record-level integrity check
+localizes damage to one slot. Ranking by a query vector is a matrix product
+over the vector regions of a shard as it lies on disk. An archive that knows
+its holdings knows its catalog's size to the byte, a million artefacts being
+four gigabytes of cards whatever the artefacts are, so that replication,
+sharding, and the decision to mirror another institution's cards are
+decisions about a known quantity.
+
+These are affordances, and the honest statement of what has been shown is
+that the fixed size \emph{permits} them without a separate index. It has not
+been shown that they improve a digital-library workload: variable-length
+formats have well-engineered equivalents, an SQLite table, a Parquet column,
+a JSON-lines file with an offset index, or a plain NumPy matrix of vectors
+beside a record file, and a comparison of raw-card scanning against those on
+a realistic catalog is an experiment not yet run (Section~\ref{sec:governance}).
+What the fixed size buys without measurement is simpler to state: one
+artefact type for the whole catalog, so that a mirror is a copy of a file,
+and a validation rule that a consumer in any language can apply before it
+understands a single field.
+
+The card is not the complete record. A variable-length description can remain
+in the artefact layer or in a manifest bound by digest. The card is a bounded
+descriptor intended for replication and catalog-level operations, not a
+finding aid. The choice of 4096 bytes follows a common storage granularity,
+although the correspondence is platform-dependent; it holds the digests,
+keys, signature, and locators the header needs, a 768-dimensional vector in
+half precision, and over a kilobyte of prose. The drawbacks are plain:
+verbose abstracts are truncated, and short artefacts waste most of the arena,
+as they waste most of a 4~KB filesystem block.
+
+\subsection{A machine payload beside the human text}
+
+Cataloging work increasingly aims at high precision, often by combining
+orthogonal descriptors. Suppose the interest is endometriosis in Peru. A
+paper about uterine diseases among the Quechua could be highly relevant, but
+will not surface on a keyword match. The machine payload adds a document
+vector that carries such loose associations, broader and narrower alike, and
+does so for queries not anticipated when the card was written. It is stored
+on the card so that a catalog can rank without fetching the artefact and
+without a central index. This is an affordance for retrieval systems, not a
+claim that the card or any particular embedding profile solves information
+retrieval.
+
+The card does not help with quality. Tens of thousands of papers are
+genuinely about quantum gravity; they are not false positives, and they vary
+in quality by orders of magnitude. What the card can do is make the
+description honest about its own provenance: the signing key is named; the
+embedding profile is named; the text that was embedded is digested. The
+extraction and reduction policy under which the vector was computed is
+recorded in the card's JSON sidecar, and it is bound into the card only when
+the producer supplies a manifest for the manifest digest to cover; a reader
+of the bare card can verify what bytes it describes and which profile it
+names, but cannot infer from the card alone that the sidecar's policy is the
+policy that was used. Two producers describing the same bytes will differ in
+their text and therefore in their vectors, and consumers compare vectors by
+cosine similarity rather than byte identity. Section~\ref{sec:impl} reports
+how far that variation reaches in practice.
+
+\subsection{Embedding profiles and their obsolescence}
+\label{sec:profiles}
+
+Embedding models and their runtimes change over time. The format therefore
+does not freeze a single model. The profile field is sixteen bits and names
+model, dimension, and encoding together; the arena split is per card, so
+moving from a 384-dimensional to a 768-dimensional profile costs only text, a
+1024-dimensional half-precision vector fits the same way, and a binary or
+8-bit quantization fits with room to spare. When a catalog moves to a new
+profile it reissues cards along the supersession chain, and a consumer
+holding cards under two profiles ranks each population separately, as it
+would two indices. What the format fixes is where the vector lives and how it
+is described, not which model made it.
+
+Which model made it is nonetheless a question the catalog must be able to
+answer exactly, and a colloquial model name does not: the same weights
+circulate in several serializations, from several hubs, no two files
+byte-identical. The format's answer is to make the model an artefact like
+any other. The weights and tokenizer of a profile's model, in one canonical
+serialization, are archived, and a card is minted for the archive: a
+Software-class card that binds the exact bytes by digest, names the model in
+its manifest, carries HTTP, IPFS, and Swarm locators, and is signed. Four
+such cards accompany this paper, one for each model evaluated in
+Section~\ref{sec:impl}; their identifiers are given in the reproducibility
+declaration there. A catalog that archives the model beside the cards it
+validates no longer depends on any distribution hub's longevity, and a
+consumer asking which model profile~2 names gets an answer with the same
+shape, and subject to the same checks, as any other artefact in the drawer.
+
+Two properties must be kept distinct here. \emph{Model identity} is
+content-bound: the card pins the bytes, and a consumer can verify that it
+holds the same weights and tokenizer files the profile names. \emph{Vector
+reproducibility} is weaker. The vector a consumer recomputes depends further
+on pooling, chunk boundaries and weighting, tokenizer runtime behaviour, and
+the floating-point environment, all of which the present profiles leave
+partly to the producer; the differential test below measures the residual
+this leaves within one environment and does not bound it across
+environments. The model card fixes the first property. The second is the
+subject of the drift experiment proposed in Section~\ref{sec:governance}, and
+until it is run a recomputed vector should be compared by cosine, not
+expected to match.
+
+\subsection{Content binding and format migration}
+
+A digital library normalizes formats: a PDF is migrated to PDF/A, a TIFF is
+rewrapped, headers change. Every such act changes the bytes, and a card bound
+to the old bytes no longer matches the new file. This is the intended
+behaviour of a fixity binding, and it is exactly the property that lets a
+reader notice that an archive has changed under them \cite{Lerner:2017,
+Aturban:2019}; but it means the workflow must be stated. A migrated artefact
+is a new artefact. It gets a new card, whose previous-card digest points at the
+old one and whose manifest digest binds the migration record, so that the
+chain carries the history and the old card remains true of the bytes it
+described. This is the same discipline BagIt applies to a bag's payload
+manifest \cite{Kunze:2018}, lifted from the package to the catalog.
+
+\subsection{Publication posture}
+
+A card is a publication act. Even when the artefact is withheld, a card may
+disclose enough to identify, summarize, retrieve, classify, or compare it; a
+document vector reveals gist-level information about the text it represents
+and is not anonymization. The producer therefore runs under an explicit
+content policy, shipped as an editable JSON profile, that says whether a text
+prefix, a vector, a thumbnail, OCR, or an archive member listing may be
+stored. The policy is recorded in the sidecar, and a producer that must be
+able to prove which policy it applied places the policy in a manifest and
+binds the manifest. A profile suited to a public science library allows all
+of these; a profile for a directory of mixed-rights material allows almost
+none and records hashes only. The same institutional, legal, and ethical
+review that applies to a finding aid applies to a card, and the format is
+built so that a producer can obey it.
+
+\subsection{Trust, keys, and admission}
+\label{sec:trust}
+
+A signature is only as meaningful as the way its public key reached the
+verifier, and the format is explicit about three cases.
+
+The published reference artefacts, the two reference cards and the four
+model cards, are signed with \emph{test keys}: each private key is derived
+deterministically from a seed label that the sidecar records in the clear.
+This is intentional. It lets two implementations byte-compare a signed card,
+which is what the differential test requires, and it makes every published
+card reproducible by anyone. It also means that anyone can derive the private
+key and mint a differently-worded card under the same public key. The
+signature on these cards therefore attests reproducibility and nothing else,
+the sidecars say so in a \texttt{key\_kind} field, and no reader should treat
+the reference issuer as an identity. A catalog that publishes cards for
+consumption rather than for testing signs with a key generated at random and
+kept private, the producer accepts such a key from a file, and the public key
+is distributed through a channel the consumer already trusts: an
+institution's web page over TLS, a repository's key list, or a card for the
+key itself, which the header's issuer-card reference exists to point at.
+
+Admission is a catalog decision, not a card property. A card whose signature
+verifies under an unknown key is syntactically valid; whether it is admitted
+to a catalog is a matter of that catalog's policy, which in the simplest case
+is a list of accepted issuer keys. Key rotation is expressed with the
+machinery already present: the issuer publishes a new key, reissues its cards
+along the supersession chain, and the chain records the change. Revocation
+is likewise a catalog-layer act, a statement that cards under a given key are
+no longer admitted after a given date, and the format supplies the fields
+such a statement needs without prescribing its transport. Finally, the
+embedding profile numbers are assigned in the specification by its editor and
+by agreement among the catalogs that will read them; who should hold that
+role in the long run is the registry question of Section~\ref{sec:governance}.
+
+\section{Relation to existing practice}
+\label{sec:related}
+
+Dublin Core \cite{Kunze:2007} is the closest relative: a deliberately small
+element set, meant for machine harvesting and cross-domain use, whose Type
+Vocabulary the card adopts outright. The card differs in being fixed-size,
+signed, and bound to the bytes described; it can be read as a signed,
+content-bound carrier for a Dublin-Core-sized description plus a vector.
+OAI-PMH \cite{Lagoze:2001} moves such records between repositories on request;
+a shard of cards is the same idea with the transport removed, so that a mirror
+is a copy of a file.
+
+The metadata community's direction of travel for twenty years has been toward
+graphs: Linked Data, RDF, JSON-LD \cite{Kellogg:2020}, and the shared
+vocabulary of schema.org \cite{Guha:2016}. The card is not a replacement for
+that work. A graph is extensible, mergeable, and expressive; the card is not.
+The card's proposed role relative to a graph is an envelope: a fixed-size,
+signed, content-bound unit that can carry a JSON-LD fragment or a schema.org
+type in its classification text, can be replicated without a triple store,
+and can be ranked without being parsed. Signposting \cite{VanDeSompel:2015}
+makes a related bargain for the live web, exposing a few typed links so that a
+machine can navigate a scholarly object without understanding it; a card is a
+signpost that survives offline.
+
+In web archiving, WARC \cite{ISO:2017} is the record of capture, and the card
+is not a substitute for it; a card can describe a WARC file, or a member of
+one, as it can describe anything with bytes. InterPlanetary Wayback
+\cite{Alam:2016} put WARC payloads on IPFS and is the nearest precedent for
+content-addressed replication of archival holdings; a card carries the IPFS
+CID and Swarm reference of what it describes and can serve as a signed,
+portable index entry for such a store. Memento \cite{VanDeSompel:2013} answers
+``what did this URI look like at time~$t$'' from a live archive; a card
+answers the narrower question ``which bytes did this key describe, and where
+might they be,'' and does so offline. The fixity work of Aturban, Alam,
+Nelson, and Weigle \cite{Aturban:2019}, and the demonstration by Lerner, Kohno,
+and Roesner that the archived web can be altered from the present
+\cite{Lerner:2017}, motivate the object binding directly: a signed digest
+issued at cataloging time and held outside the archive is what lets a later
+reader notice the change. BagIt \cite{Kunze:2018} does this for a package;
+the card does it for a catalog entry. Table~\ref{tab:compare} sets the
+formats side by side on the properties this paper is about.
+
+\begin{table}[t]
+\caption{The card beside the formats it is most often compared with. ``Offline''
+means a consumer holding only the record and the artefact can verify the
+binding without a network. Extensibility is the property the card gives up.}
+\label{tab:compare}
+\footnotesize
+\setlength{\tabcolsep}{2.2pt}
+\begin{tabular}{@{}lp{0.85cm}p{0.95cm}p{0.85cm}p{1.15cm}p{0.85cm}p{0.75cm}@{}}
+\toprule
+ & extens\-ible & content-bound & signed & transport assumed & offline verify & vector rank \\
+\midrule
+DC / OAI-PMH & yes & no & no & HTTP harvest & no & no \\
+JSON-LD & yes & no & option & graph store & no & no \\
+Signposting & yes & no & no & live HTTP & no & no \\
+WARC & yes & per record & no & file & yes & no \\
+Memento & n/a & no & no & live HTTP & no & no \\
+BagIt & yes & manifest & option & package & yes & no \\
+clawmarc & no & SHA-256 & yes & none & yes & yes \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\section{Implementation and experience}
+\label{sec:impl}
+
+\paragraph{What is public, and which version.} The bundle this paper
+describes, clawmarc v1.rc3, contains the specification as an Internet-Draft
+in Markdown, XML, text, and HTML; the C header that is the normative layout;
+the Python producer, inspector, and general-file cataloger; three editable
+content policies; batch scripts that mint indirect and doubly indirect
+collection cards over a directory tree; the two reference cards and the four
+model cards with their JSON sidecars; the model archives' checksum manifest;
+and the experiment scripts and result files named below. The GitHub
+repository at \url{https://github.com/kornai/clawmarc} mirrors the bundle
+from commit \texttt{76d8c2d} (2026-09-12) onward; the 2.2~GB model archives
+are served from their locators, not committed. Should the two ever differ, the bundle
+deposited with the paper, identified by the digests in the reproducibility
+declaration, is the normative one.
+
+\paragraph{Reference layout.} The header declares the structure packed and
+asserts at compile time that it is 4096 bytes, that the arena begins at 0x4c0,
+that the footer begins at 0xfc0, and that every multi-byte field sits on its
+natural boundary. A producer in any language can be checked against it by
+compiling one file.
+
+\paragraph{Producer and inspector.} The Python producer detects type by
+content, extracts text with version-pinned tools (pdftotext, pandoc, detex),
+normalizes to Unicode NFC, computes the document vector when policy allows,
+packs the card, signs it, and emits a JSON sidecar recording the extraction
+and reduction policy and the exact text that was embedded. The inspector
+validates length, magic, split, reserved-zero fields, both CRCs, and the
+signature, and recomputes the object binding when the artefact is at hand.
+The producer signs with the deterministic test seed unless a key file is
+supplied, and labels the sidecar accordingly (Section~\ref{sec:trust}).
+
+\paragraph{Differential test.} Two implementations were written independently
+by two different language-model systems working from the same specification,
+without sight of each other's code, and each minted a card for the same
+artefact under the same test seed. The cards agreed byte for byte on every
+field the specification pins: object and schema digests, class, split,
+embedding profile, ORCID, license, chain and indirection fields, and title.
+They disagreed on every field the specification had left to producer judgment:
+which of several valid mirror locators to record, whether to populate work
+timestamps from the bundle, and what to put in the abstract and keywords,
+where one producer wrote a gist and the other scraped the source. The
+embeddings told the same story in numbers. Two runs of one implementation
+agreed to cosine 0.9999999999. The same text segments run through the other
+implementation's pipeline agreed to 0.989, which measures how much the
+construction of the embedding input was unpinned. The two cards as minted
+agreed to 0.932, which measures how much the text differed. The specification
+was tightened on the first two points; the third is the residual that
+consumers must expect, and the reference cards are published with that
+expectation stated.
+
+\paragraph{Implementation demonstration.} Twenty PDFs were drawn at random
+(seed 20260907) from the 3,295 in the author's paper archive and minted on a
+laptop with text extraction, a document vector under profile~2, and a body
+prefix under the public-library policy. All twenty produced valid cards of
+class Text. Extraction took 0.08~s per file on average and minting 5.9~s,
+most of it interpreter start and model load that a batch producer pays once.
+The embedded text averaged 74,000 characters and is the entire extracted
+body: the vector is computed over the full text, however long, while the
+card's human-readable prefix is truncated at its 1280 bytes, as the design
+expects. Over the resulting 80~KB of cards, and without access to the source
+files, card-only ranking and keyword lookup ran as designed: a keyword scan
+of the text regions for \emph{grammar} returned the three linguistics papers
+and nothing else, and nearest neighbours by cosine grouped the linguistics
+papers and the neural-computation papers as a reader would. This is a
+demonstration that the operations work on the cards alone; it is not
+evidence about retrieval quality, which the two collection experiments below
+address.
+
+\paragraph{Model comparison.} Four models were run over the same twenty
+documents with the pipeline otherwise fixed: full extracted text, chunks at
+the model's native window, token-count weighted mean, final L2
+normalization. Throughput on the laptop was flat across the three
+768-dimensional multilingual candidates, 10,900--11,700 tokens per second,
+and 32,700 for the 384-dimensional profile~1. Everything else differed. The
+untuned \texttt{xlm-roberta-base} collapsed: all 190 pairwise cosines fell
+between 0.996 and 1.000, the entire ranking signal squeezed into the third
+decimal place, and no profile is assigned to it. Multilingual BERT
+(profile~2) spread the same pairs over 0.839--0.991; the English-only
+sentence-tuned profile~1 model over 0.592--0.959; and the multilingual
+sentence-tuned profile~3 model over 0.156--0.903. The two sentence-tuned
+models, which share no architecture, training data, or language coverage,
+ranked the 190 pairs in the closest accord of any pair of models (Spearman
+0.90), the two untuned encoders agreed that well only with each other (0.88),
+and tuned--untuned agreement ran at 0.80 and below. On the 1,400 Cranfield
+documents the same ordering recurs at lower levels (pair Spearman 0.74 for
+the two tuned models, 0.43--0.63 elsewhere). A reading consistent with these
+figures is that the tuned models approximate a common similarity which the
+untuned ones see through noise; on a sample of twenty documents and one
+benchmark this is a hypothesis, not a finding. Quantization, by contrast,
+costs nothing measurable: rounding the vectors to binary16, the card's
+storage encoding, left rank order identical for all four models (Spearman
+1.000, every nearest neighbour unchanged).
+
+\paragraph{Judged retrieval experiment.} To separate the catalog affordance
+from the quality of any one embedding, the same four models and two lexical
+baselines were evaluated on the Cranfield collection: 1,400 documents, 225
+queries, and the collection's graded relevance judgments. The evaluation used
+the full extracted document text and cosine ranking for the vector models;
+BM25 and sublinear TF--IDF used the same document and query texts.
+Table~\ref{tab:results} gives the figures. The untuned multilingual encoders
+performed far below the rest. These results are evidence about this
+benchmark and this implementation, not a general ranking of embedding
+models. The public documentation of the BGE and MPNet checkpoints does not
+disclose Cranfield among their training resources \cite{BAAI:2023,Reimers:2021};
+this is an absence of disclosed overlap, not proof that none exists. The
+result supports the narrower conclusion that a card can carry
+representations from models with materially different retrieval behaviour,
+while leaving model selection to the retrieval application.
+
+\begin{table}[t]
+\caption{Retrieval results. Cranfield: 225 judged queries over 1,400
+documents, graded relevance. NewReuters: 100 query documents over 5,000
+sampled Reuters documents, with a shared topic label as the only relevance
+proxy; the proxy metrics are not comparable with the judged ones and are
+named accordingly. Single runs; no confidence intervals are available, and
+differences of a few hundredths should not be read.}
+\label{tab:results}
+\footnotesize
+\setlength{\tabcolsep}{2.4pt}
+\begin{tabular}{@{}lrrrrrr@{}}
+\toprule
+ & \multicolumn{4}{c}{Cranfield (judged)} & \multicolumn{2}{c}{NewReuters (proxy)} \\
+\cmidrule(lr){2-5}\cmidrule(lr){6-7}
+model & MAP & P@10 & nDCG@10 & R@100 & proxy-MAP & proxy-P@10 \\
+\midrule
+BGE-small (p.\,1) & 0.329 & 0.254 & 0.359 & 0.758 & 0.500 & 0.730 \\
+MPNet (p.\,3)     & 0.248 & 0.196 & 0.281 & 0.666 & 0.520 & 0.756 \\
+mBERT (p.\,2)     & 0.073 & 0.054 & 0.078 & 0.349 & 0.456 & 0.579 \\
+XLM-R (none)      & 0.019 & 0.015 & 0.020 & 0.126 & 0.369 & 0.441 \\
+BM25                  & 0.274 & 0.226 & 0.315 & 0.697 & 0.442 & 0.736 \\
+TF--IDF               & 0.259 & 0.205 & 0.295 & 0.699 & 0.440 & 0.711 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\paragraph{NewReuters proxy experiment.} A second collection was built by
+sampling 5,000 English Reuters documents and 100 query documents (seed
+20260910), using shared Reuters topic labels as the only proxy for relevance.
+The proxy-MAP and proxy-P@10 columns of Table~\ref{tab:results} report it.
+These figures are not comparable with Cranfield MAP: the NewReuters queries
+have no human relevance judgments, and the topic proxy can both miss relevant
+documents and count merely topical documents as relevant. Within that
+limitation, mBERT's proxy-MAP is competitive with the lexical baselines, but
+its proxy-P@10 is well below theirs. The experiment therefore suggests, but
+does not establish, a first-pass use for a broadly available multilingual
+profile: candidate-set recall at a specified depth must be measured with real
+judgments before deployment, and the Cranfield figures show that such a
+profile should not be presented as a fine-grained final ranker. A catalog
+that uses one profile to reduce the candidate set and delegates final ranking
+to a task-specific index is a testable engineering hypothesis, not a result
+of this experiment.
+
+\begingroup\sloppy
+\paragraph{Reproducibility declaration.} Layout~1.3; schema digest (SHA-256
+of \nolinkurl{clawmarc_catalog_card.h}) \texttt{1dfaee46\ldots}, bound by
+all six published cards. Reference cards \texttt{d71d5da6\ldots} (bundle
+with a profile-1 vector) and \texttt{bf8a9b06\ldots} (general file, no
+vector). Model cards (full names in Section~\ref{sec:profiles} and in the
+bundle's manifest): BGE-small \texttt{1e6f3f41\ldots}; mBERT
+\texttt{52e67acd\ldots}; MPNet \texttt{2071b96f\ldots}; XLM-R
+\texttt{a452acf6\ldots}; each binds its archive by SHA-256, and the
+checkpoint's \nolinkurl{model.safetensors} digest is recorded in the bundle's
+model-identity note and in the bibliography entries. All six signatures are test-seed signatures. Runtime for every
+measurement: Python 3.12.9, torch 2.14.0, transformers 4.49.0,
+sentence-transformers 5.6.0, numpy 2.2.3, CPU inference in float32 with
+binary16 storage, on an Apple M2 laptop (26~GB) under macOS~26.6. Chunking:
+480 body tokens for profiles~1 and~2 and for XLM-R, 126 for profile~3 (its
+native window); stride 0; token-count weighted mean; final L2
+normalization. Seeds: 20260907 (demonstration and model comparison),
+20260910 (both collection experiments). Result files, with SHA-256
+prefixes: \nolinkurl{cranfield_experiment_results.json} \texttt{fd492638};
+\nolinkurl{newreuters5000_results.json} \texttt{870b21da};
+\nolinkurl{pilot_run_20260907_mbert_fulltext.json} \texttt{4c78183b};
+\nolinkurl{model_compare_20260908.json} \texttt{a2b53220}; scripts
+\nolinkurl{run_ir_experiments.py} \texttt{7feeeff9} and
+\nolinkurl{run_cranfield_experiment.py} \texttt{cfca670d}. All are in the
+bundle, whose manifest lists the full digests. The model archives have two
+independent HTTPS sources: \url{https://lebadus.ai/Resources/Models/}, the
+cards' HTTP hint, and the assets of the GitHub release \texttt{v1.rc3}, the
+cards' second mirror; they are also on IPFS and Swarm. All four archives were
+verified byte-exact against \nolinkurl{SHA256SUMS} on every route on
+2026-09-12. The checksum manifest and the cards travel with the bundle and
+the release, and are being mirrored to the lebadus endpoint.
+\endgroup
+
+\section{Future work}
+\label{sec:governance}
+
+The artefact classes now reuse a vocabulary the Dublin Core Metadata
+Initiative maintains, and the structural values are fixed by the
+specification, so the class byte needs no registrar. Two enumerations still
+do: the embedding profiles, which will grow as models change, and the
+encryption profiles. The specification leaves most of each space unassigned,
+names no authority beyond its editor, and asks producers not to consume
+unassigned values in public cards except by agreement among the catalogs
+that will read them. Three resolutions are open: a registry lodged with an
+existing body, profiles named by URI in a manifest and resolved rather than
+enumerated, or continued enumeration by agreement while producers remain
+few. The format has been written so that any of the three can be adopted
+later without a layout change, and the choice will be made by the number of
+producers rather than by argument.
+
+\paragraph{Fixed size, measured.} The affordances of
+Section~\ref{sec:fixed} should be costed against their variable-length
+equivalents: raw-card stride scanning and matrix ranking against an SQLite
+table with a vector column and against a NumPy matrix beside a JSON-lines
+file, on a catalog of a million cards, measuring validation, random access,
+ranking, and replication. Until that is done the fixed size rests on the
+argument from uniformity, and the paper says so.
+
+\paragraph{Model identity and drift.} The model cards make the identification
+of a profile's model exact, but one quantity in them is recorded rather than
+pinned: the runtime. A recomputed vector depends on the pooling code and the
+floating-point environment as well as on the weights, and while the
+differential test bounds reproducibility within one environment at ten
+decimal places, drift across environments is unmeasured. Measuring it is the
+next experiment, run the way the differential test was run: the same model
+card, several environments, a cosine agreement matrix. If cross-environment
+drift lands near the within-environment bound, digest-pinning the weights
+suffices and the runtime stays advisory; if not, the profile must also name
+the runtime.
+
+\paragraph{Choice of model.} Which model deserves the next profile is an
+empirical question involving retrieval quality, language coverage, runtime
+cost, and the durability of the weight distribution. The two collection
+experiments illustrate why the card should not prescribe that choice. BGE
+and MPNet were the strongest vector profiles in the judged and proxy
+evaluations respectively; mBERT was weak on the fine-grained Cranfield
+judgments but competitive as a coarse pre-selector on the proxy; and XLM-R
+was weak in both. The results do not establish a universal model ranking.
+They establish that the profile field can preserve model identity while
+catalogs choose different profiles for candidate generation and final
+ranking.
+
+\paragraph{Reduction.} The reduction from an unbounded text to one vector is
+recorded in the sidecar but left to producer choice: chunk size, chunk
+weighting, and pooling are all defensible in several ways, and the 0.989
+agreement figure in the differential test measures exactly the cost of
+leaving them unpinned. Candidate reductions are compared by the same offline
+IR harness, and the specification will pin one when the comparison says
+something.
+
+\section{Conclusion}
+
+The format described here assumes that the descriptor of a digital artefact
+should have the same shape everywhere, and derives the rest: content binding
+so the descriptor can be checked, a signature so it can be attributed once
+its key is trusted, locators so it can be followed, a machine payload so it
+can be ranked without being fetched, and a fixed size so that all of this can
+be replicated and scanned as a dense array. Its purpose is to provide a
+uniform substrate on which retrieval and cataloging methods can continue to
+improve, while keeping older cards valid as models and storage systems
+change. Cards minted for large public collections also provide durable
+inventories against which later audits can detect bitrot, disappearance, or
+loss of availability; the card itself does not restore a missing artefact.
+The specification, reference implementation, reference cards, and model cards
+are public in the bundle deposited with this paper, signed with keys that
+are explicitly for testing. The measurements reported are preliminary and
+single-run; the claims that rest on them are stated as hypotheses where they
+are hypotheses, and the questions that require governance are separated from
+the ones that require experiments.
+
+\begin{acks}
+We thank Eliot Lear (Cisco) for penetrating criticism of an earlier draft.
+The specification and the reference implementation were developed with
+substantive assistance from GPT-5 Codex (OpenAI) and Claude Opus (Anthropic),
+including independent implementations of the differential test; Gemini 3.1
+Pro (Google) ran an initial pilot that exposed a missing PDF branch in the
+cataloger. GPT-5 Codex performed substantive experimental design,
+implementation, and analysis for the collection experiments and wrote two
+adversarial reviews, the second of which (2026-09-11) shaped this revision.
+Claude Fable 5.1 (Anthropic) drafted an earlier version from the
+specification and project record, minted the model cards, and revised the
+paper in response to the reviews. The paper is submitted under the sole
+authorship of Andr\'as Kornai, who is responsible for its content. This
+disclosure follows ACM policy on authorship and generative AI.
+\end{acks}
+
+\bibliographystyle{ACM-Reference-Format}
+\bibliography{clawmarc}
+
+\end{document}
