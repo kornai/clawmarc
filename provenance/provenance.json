@@ -93,6 +93,22 @@
       "cross_route_verification": "2026-09-12: full-download, size-checked SHA-256 comparison of all four archives against SHA256SUMS on HTTP (lebadus.ai), IPFS (local Kubo pins), and Swarm (local bee, batch 9adf1dbb…): 12/12 byte-exact. Log: Blackboard/route_recheck_20260911.log. An earlier run's mismatches on the three large archives were 900-second download timeouts, not content errors."
     }
   },
+  "release_2026_09_12": {
+    "submission": "WADL 2026 EasyChair submission made by AK on 2026-09-12 (7-page WADL prong, portability paragraph included); arXiv posting pending the organizers' answer on simultaneous submission",
+    "github": "kornai/clawmarc main mirrors the bundle from 76d8c2d onward; release v1.rc3 carries the four archives, SHA256SUMS, CARD_INDEX.md, PUBLISH_MANIFEST.md, CARD_LOCATORS.tsv, the four model cards with sidecars, the paper PDF and its card",
+    "archives_verified_every_route": "all four archives hash-verified against SHA256SUMS on lebadus HTTPS, IPFS, Swarm (Blackboard/route_recheck_20260911.log) and on the GitHub release (Blackboard/github_route_check_20260912.log, full downloads)",
+    "cards_replicated": "six cards, sidecars, and manifests on IPFS (CIDv1, pinned) and the Swarm batch, round-trip verified; locators in src/model_resources/CARD_LOCATORS.tsv",
+    "paper_pdf": {
+      "file": "src/clawmarc_wadl.pdf",
+      "sha256": "f2db683afe6c2765770ae11819351ae381f7348ff51625058603dcb68cf1ebdb",
+      "ipfs_cid": "bafybeidw2kvyezspkwcmnju2gfxhyveblxskuzh2hiur2d2viuqoifkdz4",
+      "swarm_reference": "df5ceb30d222c034512e4916caf7f2638fa7d09adfa0a8f7b905d6923ed2ccab",
+      "github_asset": "https://github.com/kornai/clawmarc/releases/download/v1.rc3/clawmarc_wadl.pdf",
+      "card": "cards/clawmarc_wadl_v1rc3.cxcc — card_id a5482865cada0644b9e9655947fd5adc7159a411ab2485ba7ef4c24ef59f8f59; class 27 Text, profile 2 vector over the extracted text, schema = header, test-seed signature, verified by the Python and the C verifier with --object; its own locators in CARD_LOCATORS.tsv",
+      "pending": "lebadus.ai / kornai.com HTTPS copies (AK); arXiv (AK, after the organizers answer)"
+    },
+    "c_tools": "reference/c (GPT-5 Codex, 2026-09-12): cxcc-verify / cxcc-inspect / cxcc-mint-text, C99, integer-only, builds with -mgeneral-regs-only; T1-T3 pass on macOS arm64, no FP instructions in the binary; 32-bit and Linux builds not yet made (Blackboard/CODEX_portable_tools_20260912.md, CLAUDE_portable_tools_ack_20260912.md)"
+  },
   "citations": {
     "count": 25,
     "verified": "all, 2026-09-07 (arXiv abstract pages, RFC Editor info pages, ODU author copy, adalerner.com author copy)",

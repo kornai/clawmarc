@@ -321,6 +321,9 @@ def build_card(args: argparse.Namespace) -> tuple[bytes, dict[str, Any]]:
         "issuer": {
             "seed_label": args.issuer_seed,
             "public_key_pem": public_key_pem(issuer_private).strip(),
+            "key_kind": "deterministic-test-seed",
+            "key_note": ("Private key derived from the public seed label; forgeable by design. "
+                         "The signature attests reproducibility, not issuer identity."),
         },
         "text_segments": {
             "title": segments.title,
