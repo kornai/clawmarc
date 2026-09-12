@@ -30,7 +30,8 @@
 \orcid{0000-0001-6078-6840}
 \email{kornai@sztaki.hu}
 \affiliation{%
-  \institution{SZTAKI Institute for Computer Science and Control}
+  \institution{SZTAKI Institute for Computer Science and
+    Control\\and\\Budapest University of Technology and Economics}
   \city{Budapest}
   \country{Hungary}
 }
@@ -128,13 +129,11 @@ available.
 The format grew out of ClawXiv, an archival workflow for research produced
 jointly by humans and language models \cite{Kornai:2026a}, where the need to
 catalog machine-produced bundles at machine speed was felt early.
-Section~\ref{sec:card} states the design. Section~\ref{sec:rationale} gives
-the reasons for its main choices, including the ones that run against current
-practice, and states the trust model. Section~\ref{sec:related} places the
-card among the formats already in broad currency. Section~\ref{sec:impl}
-reports what has been built and measured, with a reproducibility declaration,
-and Section~\ref{sec:governance} lays out what remains, most of it
-experimental.
+Sections~\ref{sec:card}--\ref{sec:related} state the design, its rationale
+and trust model, and its relation to existing formats;
+Section~\ref{sec:impl} reports what has been built and measured, with a
+reproducibility declaration; Section~\ref{sec:governance} lays out what
+remains.
 
 \section{The card}
 \label{sec:card}
@@ -293,25 +292,32 @@ decisions about a known quantity.
 
 These are affordances, and the honest statement of what has been shown is
 that the fixed size \emph{permits} them without a separate index. It has not
-been shown that they improve a digital-library workload: variable-length
-formats have well-engineered equivalents, an SQLite table, a Parquet column,
-a JSON-lines file with an offset index, or a plain NumPy matrix of vectors
-beside a record file, and a comparison of raw-card scanning against those on
-a realistic catalog is an experiment not yet run (Section~\ref{sec:governance}).
-What the fixed size buys without measurement is simpler to state: one
-artefact type for the whole catalog, so that a mirror is a copy of a file,
-and a validation rule that a consumer in any language can apply before it
-understands a single field.
+been shown that they improve a digital-library workload: an SQLite table, a
+Parquet column, a JSON-lines file with an offset index, or a NumPy matrix
+beside a record file provide equivalents, and a comparison against them on a
+realistic catalog is an experiment not yet run (Section~\ref{sec:governance}).
 
-The card is not the complete record. A variable-length description can remain
-in the artefact layer or in a manifest bound by digest. The card is a bounded
-descriptor intended for replication and catalog-level operations, not a
-finding aid. The choice of 4096 bytes follows a common storage granularity,
-although the correspondence is platform-dependent; it holds the digests,
-keys, signature, and locators the header needs, a 768-dimensional vector in
-half precision, and over a kilobyte of prose. The drawbacks are plain:
-verbose abstracts are truncated, and short artefacts waste most of the arena,
-as they waste most of a 4~KB filesystem block.
+What the fixed size buys without measurement is portability. A consumer
+needs a C compiler, SHA-256, Ed25519, and CRC-32, and nothing else: no
+parser, no schema library, no runtime. All three primitives are integer
+algorithms, so the card operations, verifying, inspecting, and minting a
+card that carries no vector, need no floating-point unit and belong on
+32-bit machines; a static verifier is a few hundred lines of C over
+public-domain primitives, and a card under profile~0, no vector and the
+whole arena human text, is a first-class card, rankable by lexical means,
+which is the tier for the smallest machines and for producers that use no
+model at all. Floating point enters only with the embedding profiles, which
+set a second floor: profile~1, at 33 million parameters, is sized for a
+Raspberry Pi or a Jetson Nano, the intended small targets, and profiles 2
+and 3 want a larger board; the drift experiment of
+Section~\ref{sec:governance} is where those environments get measured. The
+card is not the complete record: a variable-length description belongs in
+the artefact layer or in a manifest bound by digest. The choice of 4096
+bytes follows a common storage granularity; it holds the header's digests,
+keys, signature, and locators, a 768-dimensional vector in half precision,
+and over a kilobyte of prose. The drawbacks are plain: verbose abstracts are
+truncated, and short artefacts waste most of the arena, as they waste most
+of a 4~KB filesystem block.
 
 \subsection{A machine payload beside the human text}
 
@@ -491,9 +497,9 @@ the card does it for a catalog entry. Table~\ref{tab:compare} sets the
 formats side by side on the properties this paper is about.
 
 \begin{table}[t]
-\caption{The card beside the formats it is most often compared with. ``Offline''
-means a consumer holding only the record and the artefact can verify the
-binding without a network. Extensibility is the property the card gives up.}
+\caption{The card beside the formats it is most often compared with.
+``Offline'': the binding is verifiable from the record and the artefact
+alone. Extensibility is the property the card gives up.}
 \label{tab:compare}
 \footnotesize
 \setlength{\tabcolsep}{2.2pt}
@@ -571,16 +577,15 @@ prefix under the public-library policy. All twenty produced valid cards of
 class Text. Extraction took 0.08~s per file on average and minting 5.9~s,
 most of it interpreter start and model load that a batch producer pays once.
 The embedded text averaged 74,000 characters and is the entire extracted
-body: the vector is computed over the full text, however long, while the
-card's human-readable prefix is truncated at its 1280 bytes, as the design
-expects. Over the resulting 80~KB of cards, and without access to the source
-files, card-only ranking and keyword lookup ran as designed: a keyword scan
-of the text regions for \emph{grammar} returned the three linguistics papers
-and nothing else, and nearest neighbours by cosine grouped the linguistics
-papers and the neural-computation papers as a reader would. This is a
-demonstration that the operations work on the cards alone; it is not
-evidence about retrieval quality, which the two collection experiments below
-address.
+body: the vector is computed over the full text, while the card's
+human-readable prefix is truncated at its 1280 bytes, as the design expects.
+Over the resulting 80~KB of cards, and without access to the source files,
+card-only ranking and keyword lookup ran as designed: a scan of the text
+regions for \emph{grammar} returned the three linguistics papers and nothing
+else, and nearest neighbours by cosine grouped the linguistics and the
+neural-computation papers as a reader would. This demonstrates that the
+operations work on the cards alone; retrieval quality is the subject of the
+two collection experiments below.
 
 \paragraph{Model comparison.} Four models were run over the same twenty
 documents with the pipeline otherwise fixed: full extracted text, chunks at
@@ -624,12 +629,11 @@ representations from models with materially different retrieval behaviour,
 while leaving model selection to the retrieval application.
 
 \begin{table}[t]
-\caption{Retrieval results. Cranfield: 225 judged queries over 1,400
-documents, graded relevance. NewReuters: 100 query documents over 5,000
-sampled Reuters documents, with a shared topic label as the only relevance
-proxy; the proxy metrics are not comparable with the judged ones and are
-named accordingly. Single runs; no confidence intervals are available, and
-differences of a few hundredths should not be read.}
+\caption{Retrieval results. Cranfield: 225 judged queries, 1,400 documents,
+graded relevance. NewReuters: 100 query documents over 5,000 Reuters
+documents, a shared topic label the only relevance proxy; not comparable with
+the judged figures. Single runs, no confidence intervals; differences of a
+few hundredths should not be read.}
 \label{tab:results}
 \footnotesize
 \setlength{\tabcolsep}{2.4pt}
@@ -656,15 +660,13 @@ The proxy-MAP and proxy-P@10 columns of Table~\ref{tab:results} report it.
 These figures are not comparable with Cranfield MAP: the NewReuters queries
 have no human relevance judgments, and the topic proxy can both miss relevant
 documents and count merely topical documents as relevant. Within that
-limitation, mBERT's proxy-MAP is competitive with the lexical baselines, but
-its proxy-P@10 is well below theirs. The experiment therefore suggests, but
-does not establish, a first-pass use for a broadly available multilingual
-profile: candidate-set recall at a specified depth must be measured with real
-judgments before deployment, and the Cranfield figures show that such a
-profile should not be presented as a fine-grained final ranker. A catalog
-that uses one profile to reduce the candidate set and delegates final ranking
-to a task-specific index is a testable engineering hypothesis, not a result
-of this experiment.
+limitation, mBERT's proxy-MAP is competitive with the lexical baselines while
+its proxy-P@10 is well below theirs, which suggests, but does not establish,
+a first-pass use for a broadly available multilingual profile: candidate-set
+recall at depth must be measured with real judgments, and the Cranfield
+figures show such a profile is not a fine-grained final ranker. A catalog
+that uses one profile to reduce the candidate set and a task-specific index
+to rank is a testable hypothesis, not a result of this experiment.
 
 \begingroup\sloppy
 \paragraph{Reproducibility declaration.} Layout~1.3; schema digest (SHA-256
@@ -676,7 +678,7 @@ bundle's manifest): BGE-small \texttt{1e6f3f41\ldots}; mBERT
 \texttt{52e67acd\ldots}; MPNet \texttt{2071b96f\ldots}; XLM-R
 \texttt{a452acf6\ldots}; each binds its archive by SHA-256, and the
 checkpoint's \nolinkurl{model.safetensors} digest is recorded in the bundle's
-model-identity note and in the bibliography entries. All six signatures are test-seed signatures. Runtime for every
+model-identity note. All six signatures are test-seed signatures. Runtime for every
 measurement: Python 3.12.9, torch 2.14.0, transformers 4.49.0,
 sentence-transformers 5.6.0, numpy 2.2.3, CPU inference in float32 with
 binary16 storage, on an Apple M2 laptop (26~GB) under macOS~26.6. Chunking:
@@ -702,7 +704,7 @@ the release, and are being mirrored to the lebadus endpoint.
 \section{Future work}
 \label{sec:governance}
 
-The artefact classes now reuse a vocabulary the Dublin Core Metadata
+The artefact classes reuse a vocabulary the Dublin Core Metadata
 Initiative maintains, and the structural values are fixed by the
 specification, so the class byte needs no registrar. Two enumerations still
 do: the embedding profiles, which will grow as models change, and the
@@ -721,8 +723,9 @@ Section~\ref{sec:fixed} should be costed against their variable-length
 equivalents: raw-card stride scanning and matrix ranking against an SQLite
 table with a vector column and against a NumPy matrix beside a JSON-lines
 file, on a catalog of a million cards, measuring validation, random access,
-ranking, and replication. Until that is done the fixed size rests on the
-argument from uniformity, and the paper says so.
+ranking, and replication, and the card-only tools should be run on the 32-bit
+and single-board machines the portability argument names. Until that is done
+the fixed size rests on the argument from uniformity, and the paper says so.
 
 \paragraph{Model identity and drift.} The model cards make the identification
 of a profile's model exact, but one quantity in them is recorded rather than
@@ -736,25 +739,19 @@ drift lands near the within-environment bound, digest-pinning the weights
 suffices and the runtime stays advisory; if not, the profile must also name
 the runtime.
 
-\paragraph{Choice of model.} Which model deserves the next profile is an
-empirical question involving retrieval quality, language coverage, runtime
-cost, and the durability of the weight distribution. The two collection
-experiments illustrate why the card should not prescribe that choice. BGE
-and MPNet were the strongest vector profiles in the judged and proxy
-evaluations respectively; mBERT was weak on the fine-grained Cranfield
-judgments but competitive as a coarse pre-selector on the proxy; and XLM-R
-was weak in both. The results do not establish a universal model ranking.
-They establish that the profile field can preserve model identity while
-catalogs choose different profiles for candidate generation and final
-ranking.
+\paragraph{Choice of model.} Which model deserves the next profile turns on
+retrieval quality, language coverage, runtime cost, and the durability of the
+weight distribution; the two collection experiments, in which the strongest
+vector profile differed between the judged and the proxy evaluation, show
+why the card should not prescribe it. What they establish is that the profile
+field preserves model identity while catalogs choose different profiles for
+candidate generation and final ranking.
 
-\paragraph{Reduction.} The reduction from an unbounded text to one vector is
-recorded in the sidecar but left to producer choice: chunk size, chunk
-weighting, and pooling are all defensible in several ways, and the 0.989
-agreement figure in the differential test measures exactly the cost of
-leaving them unpinned. Candidate reductions are compared by the same offline
-IR harness, and the specification will pin one when the comparison says
-something.
+\paragraph{Reduction.} Chunk size, chunk weighting, and pooling are left to
+producer choice and recorded in the sidecar; the 0.989 figure in the
+differential test is the cost of leaving them unpinned. Candidate reductions
+are compared by the same offline IR harness, and the specification will pin
+one when the comparison says something.
 
 \section{Conclusion}
 
@@ -763,21 +760,19 @@ should have the same shape everywhere, and derives the rest: content binding
 so the descriptor can be checked, a signature so it can be attributed once
 its key is trusted, locators so it can be followed, a machine payload so it
 can be ranked without being fetched, and a fixed size so that all of this can
-be replicated and scanned as a dense array. Its purpose is to provide a
-uniform substrate on which retrieval and cataloging methods can continue to
-improve, while keeping older cards valid as models and storage systems
-change. Cards minted for large public collections also provide durable
-inventories against which later audits can detect bitrot, disappearance, or
-loss of availability; the card itself does not restore a missing artefact.
-The specification, reference implementation, reference cards, and model cards
-are public in the bundle deposited with this paper, signed with keys that
-are explicitly for testing. The measurements reported are preliminary and
-single-run; the claims that rest on them are stated as hypotheses where they
-are hypotheses, and the questions that require governance are separated from
-the ones that require experiments.
+be replicated, scanned as a dense array, and read on the smallest machines.
+Cards minted for large collections also provide durable inventories against
+which later audits can detect bitrot or loss; the card itself does not
+restore a missing artefact. The specification, reference implementation,
+reference cards, and model cards are public in the bundle deposited with this
+paper, signed with keys that are explicitly for testing. The measurements are
+preliminary and single-run; the claims that rest on them are stated as
+hypotheses, and the questions that require governance are separated from the
+ones that require experiments.
 
 \begin{acks}
-We thank Eliot Lear (Cisco) for penetrating criticism of an earlier draft.
+An NVIDIA academic hardware grant on Local Index Language Modeling is gratefully
+acknowledged. We thank Eliot Lear (Cisco) for penetrating criticism of an earlier draft.
 The specification and the reference implementation were developed with
 substantive assistance from GPT-5 Codex (OpenAI) and Claude Opus (Anthropic),
 including independent implementations of the differential test; Gemini 3.1

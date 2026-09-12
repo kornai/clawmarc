@@ -19,7 +19,7 @@ FILES=(bge-small-en-v1.5.tar.zst
        bert-base-multilingual-cased.tar.zst
        paraphrase-multilingual-mpnet-base-v2.tar.zst
        xlm-roberta-base.tar.zst)
-EXTRA=(SHA256SUMS PUBLISH_MANIFEST.md CARD_INDEX.md
+EXTRA=(SHA256SUMS PUBLISH_MANIFEST.md CARD_INDEX.md CARD_LOCATORS.tsv
        cards/bge-small-en-v1.5.cxcc cards/bge-small-en-v1.5.cxcc.json
        cards/bert-base-multilingual-cased.cxcc cards/bert-base-multilingual-cased.cxcc.json
        cards/paraphrase-multilingual-mpnet-base-v2.cxcc cards/paraphrase-multilingual-mpnet-base-v2.cxcc.json

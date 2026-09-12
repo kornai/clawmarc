@@ -15,6 +15,12 @@ Files at each: the four archives, `SHA256SUMS`, the four `.cxcc` cards with thei
 | `paraphrase-multilingual-mpnet-base-v2.tar.zst` | 1020392324 | `2c69401687941ea50096af37554dd6f65baa0cadb0074bc92d326f52f173a1b2` | `2071b96f8812bf9e52801423706118ddb1eab36d71a537a66f32a6968602b976` | `bafybeiaj5xm2znmqajxzh76rpdvq76pdartldy3g64zmarcdyafgsen5ea` | `159c66f03fcb736ca6ea3ca45c5e5ac4fd064e194cf1eb09adf814b558e5e7b6` |
 
 Verification: `sha256sum -c SHA256SUMS`; `libangel_inspect.py <card>.cxcc`
-recomputes the object binding when the archive is at hand. Signatures: deterministic
-test seed `clawmarc model resource issuer v1` (forgeable by design; reproducibility,
-not identity).
+recomputes the object binding when the archive is at hand, as does the
+dependency-free C verifier `reference/c/cxcc-verify --object <archive>`.
+Signatures: deterministic test seed `clawmarc model resource issuer v1`
+(forgeable by design; reproducibility, not identity).
+
+The cards, their sidecars, and these manifests are themselves replicated on
+IPFS and Swarm; `CARD_LOCATORS.tsv` lists each file's SHA-256, IPFS CIDv1, and
+Swarm reference (a card cannot carry its own locator, so the table is the
+place to look). The two reference cards from `cards/` are included.
