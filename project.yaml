@@ -164,3 +164,18 @@ changelog:
       undefined, 0 class warnings; clawxiv prong 15 pp, clean (biber's
       universal binary fails under the tool sandbox — the arm64 slice was
       extracted by hand to build it).
+  - date: 2026-09-12
+    by: 'Claude Fable 5.1 (app)'
+    what: >
+      Bundle mirrored to GitHub (commits 76d8c2d, 2e3ebbf; archives excluded).
+      Cross-route re-check: all four archives byte-exact on HTTP/IPFS/Swarm
+      (Blackboard/route_recheck_20260911.log). GitHub release v1.rc3 created
+      by AK with the four archives + manifests as assets
+      (src/model_resources/push_github_release.sh, with progress/speed log).
+      Fourth mint of the model cards adds the release assets as second HTTPS
+      mirror (in the signed locator set; hint stays lebadus.ai): card IDs now
+      bge 1e6f3f41…, mBERT 52e67acd…, mpnet 2071b96f…, xlm a452acf6….
+      Both prongs updated (IDs; "served from two independent HTTPS sources";
+      no longer "staged"); Datatracker/I-D revision narrative removed per AK.
+      CARD_INDEX.md, PUBLISH_MANIFEST.md regenerated; LICENSE (MIT) added to
+      the bundle root.

@@ -10,15 +10,15 @@
     "arena_split": 0,
     "body_crc32": "b0bb8f7e",
     "card_bytes": 4096,
-    "card_content_id": "43706630c31b50b445334f33c4b277f714da22cc1f4283a24b589cf8e6e1421d",
-    "card_id": "1a5be0ef871e3d50cbb350a93df435a18b0e18188df9a0d013a199b98f08f6c1",
+    "card_content_id": "93bc38a6ec6aa5da7c76d7a60172aeb31b8f28f54e872c7f7d70a015a2999873",
+    "card_id": "1e6f3f41f4afbc678a1118d837ffd3664f9d80d033b7ee81cb11aaf1e1a55c1c",
     "classification_len": 47,
     "flags": 557,
-    "header_crc32": "f29a12d8",
+    "header_crc32": "de7eb8c6",
     "issuer_fingerprint_prefix": "9d3f5a3fd1b75817",
     "issuer_public_key_hex": "9451c0b34787458925b7915e837871f3edc324df7b6f6adbd5f9f659e2ae9118",
     "keywords_len": 65,
-    "signature_b64": "e+RN929ZJ2TRvYfrd+A5k0qR1j4pgFWo9iZsEo2+lXH3h1W1Jc4lPHUNq0BZGnuK64rOte3oQWvuxJ8t5T8uAA==",
+    "signature_b64": "9CJn4E4sjphEwDpsb0MC4CU1Z1PQAcRuyWi0DmEu292QzCBLZUrbChqmR7+dXeX6mt1pnldeLB8yGMsvPTcBBA==",
     "size_class": 4,
     "text_truncated": true,
     "title_len": 64
@@ -37,7 +37,8 @@
   "locators": {
     "http_hint": "https://lebadus.ai/Resources/Models/bge-small-en-v1.5.tar.zst",
     "http_mirrors": [
-      "https://lebadus.ai/Resources/Models/bge-small-en-v1.5.tar.zst"
+      "https://lebadus.ai/Resources/Models/bge-small-en-v1.5.tar.zst",
+      "https://github.com/kornai/clawmarc/releases/download/v1.rc3/bge-small-en-v1.5.tar.zst"
     ],
     "ipfs_cid": "bafybeigayb3vbhwjzl7oegaq3o6rveczpqwepl3ujp6cwyfknpgdb3ajdq",
     "swarm_reference": "2f8f27a1e8d410ca89f326c9ee192dc9dc3c3cfbd45aa7c4fb5496294dbf6072"

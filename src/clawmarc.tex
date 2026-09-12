@@ -653,9 +653,9 @@ of \nolinkurl{clawmarc_catalog_card.h}) \texttt{1dfaee46\ldots}, bound by
 all six published cards. Reference cards \texttt{d71d5da6\ldots} (bundle
 with a profile-1 vector) and \texttt{bf8a9b06\ldots} (general file, no
 vector). Model cards (full names in Section~\ref{sec:profiles} and in the
-bundle's manifest): BGE-small \texttt{1a5be0ef\ldots}; mBERT
-\texttt{ad4a6824\ldots}; MPNet \texttt{d7db5051\ldots}; XLM-R
-\texttt{356ccdf0\ldots}; each binds its archive by SHA-256, and the
+bundle's manifest): BGE-small \texttt{1e6f3f41\ldots}; mBERT
+\texttt{52e67acd\ldots}; MPNet \texttt{2071b96f\ldots}; XLM-R
+\texttt{a452acf6\ldots}; each binds its archive by SHA-256, and the
 checkpoint's \nolinkurl{model.safetensors} digest is recorded in the bundle's
 model-identity note and in the bibliography entries. All six signatures are test-seed signatures. Runtime for every
 measurement: Python 3.12.9, torch 2.14.0, transformers 4.49.0,
@@ -671,12 +671,13 @@ prefixes: \nolinkurl{cranfield_experiment_results.json} \texttt{fd492638};
 \nolinkurl{model_compare_20260908.json} \texttt{a2b53220}; scripts
 \nolinkurl{run_ir_experiments.py} \texttt{7feeeff9} and
 \nolinkurl{run_cranfield_experiment.py} \texttt{cfca670d}. All are in the
-bundle, whose manifest lists the full digests. The model archives are served
-at \url{https://lebadus.ai/Resources/Models/} together with their checksum
-manifest and cards; at the time of writing the archives are in place and the
-manifest and cards are being published with the bundle, so the model
-publication should be read as staged until both are verified at that
-endpoint.
+bundle, whose manifest lists the full digests. The model archives have two
+independent HTTPS sources: \url{https://lebadus.ai/Resources/Models/}, the
+cards' HTTP hint, and the assets of the GitHub release \texttt{v1.rc3}, the
+cards' second mirror; they are also on IPFS and Swarm. All four archives were
+verified byte-exact against \nolinkurl{SHA256SUMS} on every route on
+2026-09-12. The checksum manifest and the cards travel with the bundle and
+the release, and are being mirrored to the lebadus endpoint.
 \endgroup
 
 \section{What remains to be decided}

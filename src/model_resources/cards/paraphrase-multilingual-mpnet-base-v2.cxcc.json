@@ -10,15 +10,15 @@
     "arena_split": 0,
     "body_crc32": "99333673",
     "card_bytes": 4096,
-    "card_content_id": "007c1d853d8c40155040448d565c268191c4a95035ec463dfa1aae8abe8bfa57",
-    "card_id": "d7db5051c39f604cb785e4213ee559af746a3dad015115a2135300d754a36b70",
+    "card_content_id": "f6708ef7f9d18e628be8b426c044bc02f1409fbd8614db0b41a2cf1789d66f6c",
+    "card_id": "2071b96f8812bf9e52801423706118ddb1eab36d71a537a66f32a6968602b976",
     "classification_len": 47,
     "flags": 45,
-    "header_crc32": "0b58dfc0",
+    "header_crc32": "f1db7a61",
     "issuer_fingerprint_prefix": "9d3f5a3fd1b75817",
     "issuer_public_key_hex": "9451c0b34787458925b7915e837871f3edc324df7b6f6adbd5f9f659e2ae9118",
     "keywords_len": 102,
-    "signature_b64": "geaO/qhdBGazu/yriAQkVETjP6N5xeX0kW14cXseUd8Y08WtaEb35sTQSBRw2jNc3Lcwk2ppaYd4TGVBjIcpDg==",
+    "signature_b64": "uH6znML99zxaSXFTeFDp2An0/J1orQUZpKwrr+nX1v85ToIRViHfkm7LF22X/OC+AWcvZu1B9JwRNJw+wXM6Bw==",
     "size_class": 5,
     "text_truncated": false,
     "title_len": 121
@@ -37,7 +37,8 @@
   "locators": {
     "http_hint": "https://lebadus.ai/Resources/Models/paraphrase-multilingual-mpnet-base-v2.tar.zst",
     "http_mirrors": [
-      "https://lebadus.ai/Resources/Models/paraphrase-multilingual-mpnet-base-v2.tar.zst"
+      "https://lebadus.ai/Resources/Models/paraphrase-multilingual-mpnet-base-v2.tar.zst",
+      "https://github.com/kornai/clawmarc/releases/download/v1.rc3/paraphrase-multilingual-mpnet-base-v2.tar.zst"
     ],
     "ipfs_cid": "bafybeiaj5xm2znmqajxzh76rpdvq76pdartldy3g64zmarcdyafgsen5ea",
     "swarm_reference": "159c66f03fcb736ca6ea3ca45c5e5ac4fd064e194cf1eb09adf814b558e5e7b6"

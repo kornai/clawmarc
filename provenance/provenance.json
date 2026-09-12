@@ -45,11 +45,12 @@
         "schema_sha256": "1dfaee46853b9b3e4c2786ac7b730cc393967ac8444ecbf556967e73ef4d86f1"
       },
       "model_cards_layout_1_3": {
-        "note": "root cards for the four embedding-model archives, src/model_resources/cards/; schema digest = the C header (1dfaee46…), same as the reference cards; each binds its .tar.zst by SHA-256 and a two-field {model, archive} canonical-JSON manifest; locators: HTTPS (lebadus.ai only), IPFS CIDv1, Swarm reference. Minted 2026-09-11 by src/mint_model_cards.py (third mint: locators added, kornai.homeip.net dropped, schema realigned).",
-        "bge-small-en-v1.5": {"card_id": "1a5be0ef871e3d50cbb350a93df435a18b0e18188df9a0d013a199b98f08f6c1", "archive_sha256": "417c6f409e54bb5e2c69f70572dae50c5a21fab33aeb1e775cb9296549a7b8ca", "profile": 1},
-        "bert-base-multilingual-cased": {"card_id": "ad4a6824cb864f613a31cdeeae257a2d51905594533a22bcab056623900f569c", "archive_sha256": "e6b69b84dcddbccc09da5f433cd816ebab5d9ed55d4ccf06f3103eeebcf2defa", "profile": 2},
-        "paraphrase-multilingual-mpnet-base-v2": {"card_id": "d7db5051c39f604cb785e4213ee559af746a3dad015115a2135300d754a36b70", "archive_sha256": "2c69401687941ea50096af37554dd6f65baa0cadb0074bc92d326f52f173a1b2", "profile": 3},
-        "xlm-roberta-base": {"card_id": "356ccdf05360219de57bc36b2076b39b44a5f6ade1b18ec7c67efd47fffc985a", "archive_sha256": "17fe5d884ba71ad3e3777fbcf14fed3b1c0a8a884f1d232e11ceeb9531abfe39", "profile": null},
+        "note": "root cards for the four embedding-model archives, src/model_resources/cards/; schema digest = the C header (1dfaee46…), same as the reference cards; each binds its .tar.zst by SHA-256 and a two-field {model, archive} canonical-JSON manifest; locators: HTTPS hint lebadus.ai with the GitHub release v1.rc3 assets as second mirror (in the signed locator set), IPFS CIDv1, Swarm reference. Minted 2026-09-11/12 by src/mint_model_cards.py (fourth mint 2026-09-12: GitHub release mirror added; third: locators added, kornai.homeip.net dropped, schema realigned).",
+        "bge-small-en-v1.5": {"card_id": "1e6f3f41f4afbc678a1118d837ffd3664f9d80d033b7ee81cb11aaf1e1a55c1c", "archive_sha256": "417c6f409e54bb5e2c69f70572dae50c5a21fab33aeb1e775cb9296549a7b8ca", "profile": 1},
+        "bert-base-multilingual-cased": {"card_id": "52e67acd73ba1b3e527a6f30e15052b75de608548b7c9aa44b7a520490449dbc", "archive_sha256": "e6b69b84dcddbccc09da5f433cd816ebab5d9ed55d4ccf06f3103eeebcf2defa", "profile": 2},
+        "paraphrase-multilingual-mpnet-base-v2": {"card_id": "2071b96f8812bf9e52801423706118ddb1eab36d71a537a66f32a6968602b976", "archive_sha256": "2c69401687941ea50096af37554dd6f65baa0cadb0074bc92d326f52f173a1b2", "profile": 3},
+        "xlm-roberta-base": {"card_id": "a452acf6cafd8950ceb6548c494a532895de550e56b7deae036b141a58d18732", "archive_sha256": "17fe5d884ba71ad3e3777fbcf14fed3b1c0a8a884f1d232e11ceeb9531abfe39", "profile": null},
+        "github_release": "https://github.com/kornai/clawmarc/releases/tag/v1.rc3 — the four archives, SHA256SUMS, CARD_INDEX.md, PUBLISH_MANIFEST.md (and the cards/sidecars) as assets; uploaded by AK 2026-09-12 with src/model_resources/push_github_release.sh, sizes verified against the local files",
         "swarm_batch": "9adf1dbb38bd25eb024e9688d724d8e91bc1ad281722f39a8ec179b62aa2dd6e (depth 24, immutable, TTL 95561117 s ≈ 3.03 y, bought 2026-09-10)",
         "locator_manifests": "src/model_resources/IPFS_CIDS.tsv, SWARM_REFS.tsv, PUBLISH_MANIFEST.md"
       },

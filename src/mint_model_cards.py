@@ -98,9 +98,13 @@ def mint(archive: Path) -> None:
         source_dir = Path("/Volumes/114/Sandbox") / stem
     readme = readme_for(source_dir, model_id)
     now = int(time.time())
-    # lebadus.ai is the sole authentic HTTPS source; kornai.homeip.net was
-    # dropped as a mirror (its storage is unreliable) per AK, 2026-09-11.
-    urls = [f"https://lebadus.ai/Resources/Models/{archive.name}"]
+    # HTTPS sources: lebadus.ai (the hint, packed into the card) and the
+    # GitHub release assets (second mirror, in the signed locator set).
+    # kornai.homeip.net was dropped (unreliable storage) per AK, 2026-09-11.
+    urls = [
+        f"https://lebadus.ai/Resources/Models/{archive.name}",
+        f"https://github.com/kornai/clawmarc/releases/download/v1.rc3/{archive.name}",
+    ]
     cid = IPFS_CIDS.get(archive.name, "")
     swarm_hex = SWARM_REFS.get(archive.name, "")
     title = f"{model_id} model archive ({archive.name})"

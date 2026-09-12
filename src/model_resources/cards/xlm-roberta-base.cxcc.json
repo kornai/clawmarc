@@ -10,15 +10,15 @@
     "arena_split": 0,
     "body_crc32": "0526d428",
     "card_bytes": 4096,
-    "card_content_id": "ef90ff3704ba4800bec43aa7f34f72299a776ba93e3411708a65b22a312c7b25",
-    "card_id": "356ccdf05360219de57bc36b2076b39b44a5f6ade1b18ec7c67efd47fffc985a",
+    "card_content_id": "a6ebb93bb6d321bd3454f7ec99fb9ceb8f20322b869f5516241a4acac52649dd",
+    "card_id": "a452acf6cafd8950ceb6548c494a532895de550e56b7deae036b141a58d18732",
     "classification_len": 47,
     "flags": 557,
-    "header_crc32": "c2b9cc51",
+    "header_crc32": "04bb44b2",
     "issuer_fingerprint_prefix": "9d3f5a3fd1b75817",
     "issuer_public_key_hex": "9451c0b34787458925b7915e837871f3edc324df7b6f6adbd5f9f659e2ae9118",
     "keywords_len": 59,
-    "signature_b64": "ClfJcd6EgmZMxqNkKvMlUw56KeB1WELykbMN5NZ9p4XhhC6VQoAXWt4xCAwZudf+MhDKV7Vk/vlzEtHwHl9FDg==",
+    "signature_b64": "Vrc1vxpQ2Ws6AFH8eKG6nBi2c6yUiAKS2Ybo18KSK3oa4S7pk/JwL+KGXD4JfDedRupnq8W2P1xgD3CTpJOXCQ==",
     "size_class": 4,
     "text_truncated": true,
     "title_len": 57
@@ -37,7 +37,8 @@
   "locators": {
     "http_hint": "https://lebadus.ai/Resources/Models/xlm-roberta-base.tar.zst",
     "http_mirrors": [
-      "https://lebadus.ai/Resources/Models/xlm-roberta-base.tar.zst"
+      "https://lebadus.ai/Resources/Models/xlm-roberta-base.tar.zst",
+      "https://github.com/kornai/clawmarc/releases/download/v1.rc3/xlm-roberta-base.tar.zst"
     ],
     "ipfs_cid": "bafybeie2yxjx476trpufwly63cxoav7yyem6knbcqj7iu4l3zynz652rlu",
     "swarm_reference": "163af1893aa1dab12f02ed4b74046ea7f13ef696bab0c4fe73a5559698965f66"
