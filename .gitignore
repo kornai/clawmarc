@@ -15,3 +15,9 @@ src/model_resources/archives/
 Blackboard/lear_exchange_20260907.md
 cards_backup*/
 reference/c/build/
+
+myenv/
+
+# downloaded datasets (notebooks/)
+data/
+experiments/
