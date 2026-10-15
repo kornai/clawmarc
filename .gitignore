@@ -21,3 +21,4 @@ myenv/
 # downloaded datasets (notebooks/)
 data/
 experiments/
+! experiments/experiment1.py
