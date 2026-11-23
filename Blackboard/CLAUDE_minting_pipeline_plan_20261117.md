@@ -350,6 +350,12 @@ After M5, the MLDR 1000-document / 100-query evaluation from the
 2026-10-12 plan can run directly on a `qrels:100+900` run directory.
 Retrieval and evaluation themselves are out of scope for this plan.
 
+**Update 2026-11-23:** pluggable reductions, conditional (sequential and
+hierarchical) chunk embedders, and retrieval/evaluation across several
+backends (mmap, numpy, torch, FAISS flat/IVF/HNSW) are now planned in
+`CLAUDE_minting_pipeline_addendum_20261123.md` (milestones M6–M10). That
+note replaces the line above and the single-reduction embed stage in §2.
+
 # Open questions for VS / AK
 
 1. Package name and place: `mintkit/` at the top level, or under `reference/`?
