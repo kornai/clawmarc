@@ -1,0 +1,11 @@
+mldr-200:
+  source: mldr:en
+  split: dev
+  mode: positives
+  sample: random:200
+msmarco-10k:
+  source: msmarco:passage
+  split: none
+  sample: first:10000
+folder-pdf:
+  glob: "*.pdf"

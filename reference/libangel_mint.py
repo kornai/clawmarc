@@ -12,10 +12,13 @@ import subprocess
 import struct
 import sys
 import zipfile
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-sys.path.insert(0, str(Path(__file__).resolve().parent / "reference"))
+REFERENCE_DIR = str(Path(__file__).resolve().parent)
+if REFERENCE_DIR not in sys.path:
+    sys.path.insert(0, REFERENCE_DIR)
 
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
@@ -145,82 +148,188 @@ def tex_to_search_text(tex: str) -> str:
     return tex.strip()
 
 
-def embedding_source_text(segments: TextSegments, extracted_body: str = "") -> str:
+PREIMAGE_RECIPE_V2 = "title+body/v2"
+
+
+def positive_issued_time(value: str | int) -> int:
+    issued = int(value)
+    if not 0 < issued < 2**64:
+        raise ValueError("card issuance time must be a positive uint64 timestamp")
+    return issued
+
+
+def embedding_source_text(
+    segments: TextSegments, extracted_body: str = "", *,
+    recipe: str = PREIMAGE_RECIPE_V2, include_title: bool = True,
+) -> str:
     body = clean_embedding_text(extracted_body or segments.body)
     if body:
-        return body
-    return clean_embedding_text(f"{segments.title}\n\n{segments.abstract}\n\n{segments.keywords}")
+        if recipe == "body/v1" or not include_title:
+            return body
+        return clean_embedding_text(f"{segments.title}\n\n{body}")
+    title = segments.title if recipe == "body/v1" or include_title else ""
+    return clean_embedding_text(f"{title}\n\n{segments.abstract}\n\n{segments.keywords}")
 
 
 def clean_embedding_text(text: str) -> str:
     return re.sub(r"\s+", " ", text).strip()
 
 
-def document_embedding_f16le(text: str, model_name: str) -> tuple[bytes, dict[str, Any]]:
-    profile = lookup_embedding_profile(model_name)
-    if profile is None:
-        raise SystemExit(
-            f"no embedding profile registered for {model_name}; known: {', '.join(EMBEDDING_PROFILES)}"
-        )
-    profile_id, expected_dim, mode = profile
+@dataclass(frozen=True)
+class Chunk:
+    text: str
+    token_start: int
+    token_end: int
+    kind: str = "body"
+    section_path: tuple[str, ...] = ()
+    char_span: tuple[int, int] | None = None
+
+
+@dataclass(frozen=True)
+class ChunkPlan:
+    chunks: list[Chunk]
+    max_body_tokens: int
+    version: int = 1
+
+    @property
+    def texts(self) -> list[str]:
+        return [chunk.text for chunk in self.chunks]
+
+    @property
+    def token_counts(self) -> list[int]:
+        return [chunk.token_end - chunk.token_start for chunk in self.chunks]
+
+    @property
+    def spec(self) -> str:
+        return f"fixed:{self.max_body_tokens}"
+
+
+def load_embedding_model(model_name: str, device: str | None = None):
     try:
         from sentence_transformers import SentenceTransformer
-        import numpy as np
     except ImportError as exc:
-        raise SystemExit(
-            "sentence-transformers is required for embedding profile 1; "
-            "rerun with --no-embedding only for an explicit text-only card"
-        ) from exc
+        raise ValueError("Embedding requires sentence-transformers; use --no-embed for text-only cards") from exc
+    return SentenceTransformer(model_name) if device is None else SentenceTransformer(model_name, device=device)
 
-    model = SentenceTransformer(model_name)
-    tokenizer = getattr(model, "tokenizer", None)
+
+def body_tokens_for(model) -> int:
+    body_tokens = min(480, (model.max_seq_length or 512) - 2)
+    if body_tokens < 1:
+        raise ValueError("Embedding model must have room for at least one body token")
+    return body_tokens
+
+
+def plan_chunks(prepared, tokenizer, spec: str) -> ChunkPlan:
+    """Resolve the fixed-window chunker for a prepared card or an existing preimage."""
+    kind, _, limit = spec.partition(":")
+    if kind != "fixed" or not limit.isdecimal() or int(limit) < 1:
+        raise ValueError(f"Unsupported chunker {spec!r}")
+    max_body_tokens = int(limit)
+    text = prepared if isinstance(prepared, str) else prepared.preimage
     if tokenizer is None:
-        raise SystemExit(f"{model_name} did not expose a tokenizer")
-
+        raise ValueError("Embedding model did not expose a tokenizer")
     original_model_max_length = getattr(tokenizer, "model_max_length", 512)
     tokenizer.model_max_length = max(original_model_max_length, 1_000_000)
-    token_ids = tokenizer.encode(text, add_special_tokens=False)
-    tokenizer.model_max_length = original_model_max_length
-    max_body_tokens = 480
-    chunks = [token_ids[i:i + max_body_tokens] for i in range(0, len(token_ids), max_body_tokens)] or [[]]
-    chunk_texts = [
-        tokenizer.decode(chunk, skip_special_tokens=True, clean_up_tokenization_spaces=False)
-        for chunk in chunks
-    ]
-    chunk_vectors = model.encode(chunk_texts, normalize_embeddings=True, convert_to_numpy=True)
-    weights = np.array([max(1, len(chunk)) for chunk in chunks], dtype=np.float32)
+    offsets = None
+    try:
+        if not isinstance(prepared, str) and getattr(tokenizer, "is_fast", False):
+            encoded = tokenizer(text, add_special_tokens=False, return_offsets_mapping=True, truncation=False)
+            token_ids, offsets = encoded["input_ids"], encoded["offset_mapping"]
+        else:
+            token_ids = tokenizer.encode(text, add_special_tokens=False)
+    finally:
+        tokenizer.model_max_length = original_model_max_length
+
+    body_start = 0
+    body_positions: list[int] = []
+    if offsets is not None:
+        body = clean_embedding_text(prepared.extracted_text)
+        if body and text.endswith(body):
+            body_start = len(text) - len(body)
+            for word in re.finditer(r"\S+", prepared.extracted_text):
+                if body_positions:
+                    body_positions.append(word.start() - 1)
+                body_positions.extend(range(word.start(), word.end()))
+    chunks = []
+    for start in range(0, len(token_ids) or 1, max_body_tokens):
+        end = min(start + max_body_tokens, len(token_ids))
+        decoded = tokenizer.decode(token_ids[start:end], skip_special_tokens=True, clean_up_tokenization_spaces=False)
+        chunk_kind, span = "body", None
+        if offsets and body_positions:
+            left, right = offsets[start][0], offsets[end - 1][1]
+            if right <= body_start:
+                chunk_kind = "title"
+            else:
+                first, last = max(0, left - body_start), right - body_start - 1
+                if 0 <= first <= last < len(body_positions):
+                    span = (body_positions[first], body_positions[last] + 1)
+        chunks.append(Chunk(decoded, start, end, chunk_kind, char_span=span))
+    return ChunkPlan(chunks, max_body_tokens)
+
+
+def reduce_mean_tokw(chunk_vectors, token_counts):
+    import numpy as np
+
+    weights = np.array([max(1, count) for count in token_counts], dtype=np.float32)
     vector = np.average(chunk_vectors, axis=0, weights=weights)
     norm = float(np.linalg.norm(vector))
-    if norm == 0.0:
-        raise SystemExit("embedding vector has zero norm")
-    vector = vector / norm
-    if len(vector) != expected_dim:
-        raise SystemExit(f"{model_name} returned {len(vector)} dimensions, expected {expected_dim}")
+    if not np.isfinite(norm) or norm == 0.0:
+        raise ValueError("Embedding vector must have finite, nonzero norm")
+    return vector / norm
 
-    embedding = b"".join(struct.pack("<e", float(x)) for x in vector)
-    return embedding, {
+
+def vector_to_f16le(vector) -> bytes:
+    return b"".join(struct.pack("<e", float(value)) for value in vector)
+
+
+def embedding_policy_meta(model_name, plan, vector, embedding, text, *, recipe="body/v1") -> dict[str, Any]:
+    profile = lookup_embedding_profile(model_name)
+    if profile is None:
+        raise ValueError(f"No embedding profile registered for {model_name}; known: {', '.join(EMBEDDING_PROFILES)}")
+    profile_id, expected_dim, mode = profile
+    if len(vector) != expected_dim:
+        raise ValueError(f"{model_name} returned {len(vector)} dimensions, expected {expected_dim}")
+    return {
         "embedding_mode": mode,
         "embedding_status": "provisional-long-body-reduction",
         "reduction_policy": "producer-choice until the TACL pooling study pins a reduction",
         "embedding_profile_id": profile_id,
         "model": model_name,
         "dim": len(vector),
-        "pooling": "Producer-choice provisional reduction: token chunks of 480 body tokens; encode each chunk with normalize_embeddings=True; token-count weighted mean; final L2 normalize",
+        "pooling": (
+            f"Producer-choice provisional reduction: token chunks of {plan.max_body_tokens} body tokens; "
+            "encode each chunk with normalize_embeddings=True; token-count weighted mean; final L2 normalize"
+        ),
         "normalization": "Chunk vectors and final pooled vector are L2-normalized",
         "chunking": {
             "tokenizer": "model tokenizer",
             "add_special_tokens": False,
-            "max_body_tokens_per_chunk": max_body_tokens,
+            "max_body_tokens_per_chunk": plan.max_body_tokens,
             "stride": 0,
-            "chunk_count": len(chunks),
-            "token_count": len(token_ids),
-            "chunk_token_counts": [len(chunk) for chunk in chunks],
+            "chunk_count": len(plan.texts),
+            "token_count": sum(plan.token_counts),
+            **({"spec": plan.spec, "version": plan.version} if recipe != "body/v1" else {}),
+            "chunk_token_counts": plan.token_counts,
         },
+        **({"preimage_recipe": recipe} if recipe != "body/v1" else {}),
         "encoding": "IEEE-754 binary16 little-endian",
         "bytes": len(embedding),
         "source_text_sha256": sha256_hex(text.encode("utf-8")),
         "embedding_sha256": sha256_hex(embedding),
     }
+
+
+def document_embedding_f16le(text: str, model_name: str, model=None, *, recipe="body/v1", legacy_window=False) -> tuple[bytes, dict[str, Any]]:
+    if lookup_embedding_profile(model_name) is None:
+        raise ValueError(f"No embedding profile registered for {model_name}; known: {', '.join(EMBEDDING_PROFILES)}")
+    if model is None:
+        model = load_embedding_model(model_name)
+    window = 480 if legacy_window else body_tokens_for(model)
+    plan = plan_chunks(text, getattr(model, "tokenizer", None), f"fixed:{window}")
+    chunk_vectors = model.encode(plan.texts, normalize_embeddings=True, convert_to_numpy=True)
+    vector = reduce_mean_tokw(chunk_vectors, plan.token_counts)
+    embedding = vector_to_f16le(vector)
+    return embedding, embedding_policy_meta(model_name, plan, vector, embedding, text, recipe=recipe)
 
 
 def first_body_paragraph(clean_text_value: str) -> str:
@@ -281,7 +390,7 @@ def make_card(args: argparse.Namespace) -> tuple[bytes, dict[str, Any]]:
             raise SystemExit(f"provenance {prov['signer']['name']} signs {got}, not bundle {bundle_sha.hex()}")
 
     schema_sha = sha256_bytes(Path(args.schema).read_bytes()) if args.schema else b"\0" * 32
-    issued = args.card_issued_unix
+    issued = None if args.card_issued_unix is None else positive_issued_time(args.card_issued_unix)
     if issued is None and provenances:
         issued = max(iso_to_unix(p["entropy_sources"]["timestamp_utc"]) for p in provenances)
     if issued is None:
@@ -351,7 +460,8 @@ def make_card(args: argparse.Namespace) -> tuple[bytes, dict[str, Any]]:
     )
     # The document vector is computed over the full extracted text; the
     # content-policy clamp applies only to the human-readable card prefix.
-    embed_text = embedding_source_text(segments, full_body)
+    recipe = PREIMAGE_RECIPE_V2 if content_policy.get("allow_doc_vector") else "body/v1"
+    embed_text = embedding_source_text(segments, full_body, recipe=recipe)
     if not content_policy.get("allow_doc_vector"):
         embedding = b""
         embedding_profile_id = 0
@@ -361,7 +471,7 @@ def make_card(args: argparse.Namespace) -> tuple[bytes, dict[str, Any]]:
             "deterministic": True,
         }
     else:
-        embedding, embedding_policy = document_embedding_f16le(embed_text, args.embedding_model)
+        embedding, embedding_policy = document_embedding_f16le(embed_text, args.embedding_model, recipe=recipe)
         embedding_profile_id = embedding_policy["embedding_profile_id"]
 
     inp = CardInput(
@@ -455,7 +565,7 @@ def main() -> None:
                         help="PEM-encoded Ed25519 private key for release signing; without it the "
                              "deterministic test seed is used and the signature is forgeable by design")
     parser.add_argument("--sequence", type=int, default=1)
-    parser.add_argument("--card-issued-unix", type=int)
+    parser.add_argument("--card-issued-unix", type=positive_issued_time)
     parser.add_argument("--work-created-unix", type=int)
     parser.add_argument("--work-revised-unix", type=int)
     parser.add_argument("--swarm-reference", default="")
@@ -479,7 +589,10 @@ def main() -> None:
     parser.add_argument("--no-embedding", action="store_true")
     args = parser.parse_args()
 
-    card, meta = make_card(args)
+    try:
+        card, meta = make_card(args)
+    except ValueError as exc:
+        parser.error(str(exc))
     out_card = Path(args.out_card)
     out_meta = Path(args.out_meta)
     out_card.parent.mkdir(parents=True, exist_ok=True)

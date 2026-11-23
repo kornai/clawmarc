@@ -1,0 +1,39 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "clawmarc-mintkit"
+version = "0.1.0"
+description = "Produce and inspect local ClawMARc catalog card collections"
+requires-python = ">=3.12"
+dependencies = ["cryptography", "numpy", "psutil", "zstandard", "pyyaml"]
+
+[project.optional-dependencies]
+embed = ["torch", "sentence-transformers", "transformers"]
+mldr = ["huggingface-hub"]
+msmarco = ["ir-datasets"]
+images = ["Pillow"]
+faiss = ["faiss-cpu"]
+gpu = ["nvidia-ml-py"]
+dev = ["pytest", "pytest-timeout"]
+
+[project.scripts]
+mintkit = "mintkit.cli:main"
+
+[tool.setuptools]
+packages = ["mintkit", "mintkit.sources", "mintkit.retrieve", "clawmarc_reference"]
+package-dir = {clawmarc_reference = "reference"}
+
+[tool.setuptools.package-data]
+mintkit = ["bench_presets.yaml"]
+clawmarc_reference = ["clawmarc_catalog_card.h", "content_policies/*.json", "c/*.c", "c/*.h", "c/Makefile"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+markers = [
+    "model: requires real model downloads",
+    "gpu: requires an accelerator",
+    "slow: processes a large fixture or dataset",
+]
+addopts = "-m 'not model and not gpu and not slow'"

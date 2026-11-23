@@ -41,6 +41,7 @@ bundles are tarball snapshots of it (recipe below), never a staging copy.
   `--issuer-key-file` supplies a release key; the sidecar's `key_kind` says
   which. `scripts/validate_clawmarc_repo.sh`, which assumed the old GitHub
   checkout layout, was retired to `Attic/scripts_historical/` on 2026-09-11.
+- [`mintkit/`](mintkit/README.md) — dataset readers and serial catalog-card minting.
 - `cards/` — two reference cards (`.cxcc` + `.cxcc.json`), layout 1.3;
   layout 1.2 originals in `Attic/cards_layout_1.2/`. Test-seed signatures.
 - `src/model_resources/` — the four embedding-model archives (`archives/`),
@@ -54,7 +55,7 @@ bundles are tarball snapshots of it (recipe below), never a staging copy.
   (seed 20260910); `Blackboard/pilot_run_20260907_mbert_fulltext.json` and
   `Blackboard/model_compare_20260908.json` — the demonstration and model
   comparison (seed 20260907). `src/transport_probe/` — card-only Linux probe.
-- `test_mint_and_ir.py` — Gemini's first pilot pass (2026-09-07), kept as it
+- `bench/legacy/test_mint_and_ir.py` — Gemini's first pilot pass (2026-09-07), kept as it
   was written; its results are superseded (see `Blackboard/pilot_run_20260907.md`).
 - `Blackboard/` — Lear exchange record, CFP record, session handoffs.
 - `Attic/` — ISE-era submission notes and handoffs (historical).

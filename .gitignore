@@ -20,5 +20,8 @@ myenv/
 
 # downloaded datasets (notebooks/)
 data/
-experiments/
-! experiments/experiment1.py
+/experiments/*
+!/experiments/experiment1.py
+/runs/
+/models/
+/tests/golden/local/

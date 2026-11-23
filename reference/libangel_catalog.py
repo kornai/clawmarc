@@ -11,11 +11,16 @@ import mimetypes
 import re
 import subprocess
 import sys
+import tempfile
+import unicodedata
 import zipfile
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-sys.path.insert(0, str(Path(__file__).resolve().parent / "reference"))
+REFERENCE_DIR = Path(__file__).resolve().parent
+if str(REFERENCE_DIR) not in sys.path:
+    sys.path.insert(0, str(REFERENCE_DIR))
 
 from content_policy import bool_override, clamp_text_prefix, load_content_policy
 from libangel_card import (
@@ -46,11 +51,13 @@ from libangel_mint import (
     DEFAULT_ISSUER_SEED,
     document_embedding_f16le,
     embedding_source_text,
+    PREIMAGE_RECIPE_V2,
+    positive_issued_time,
     parse_simple_yaml,
     tex_to_search_text,
 )
 
-DEFAULT_SCHEMA = str(Path(__file__).resolve().parent / "reference" / "clawmarc_catalog_card.h")
+DEFAULT_SCHEMA = str(REFERENCE_DIR / "clawmarc_catalog_card.h")
 
 
 def utc_now() -> int:
@@ -98,7 +105,7 @@ def detect_mime(path: Path) -> str:
     return guess or "application/octet-stream"
 
 
-def image_payload(path: Path, max_preview_bytes: int = 128) -> bytes:
+def image_payload(data: bytes, max_preview_bytes: int = 128) -> bytes:
     if max_preview_bytes < 128:
         return b""
     try:
@@ -106,7 +113,7 @@ def image_payload(path: Path, max_preview_bytes: int = 128) -> bytes:
     except ImportError:
         return b""
     try:
-        with Image.open(path) as img:
+        with Image.open(io.BytesIO(data)) as img:
             img = img.convert("1")
             img.thumbnail((32, 32))
             canvas = Image.new("1", (32, 32), 1)
@@ -121,39 +128,75 @@ def image_payload(path: Path, max_preview_bytes: int = 128) -> bytes:
         return b""
 
 
-def extract_text(path: Path, mime: str) -> tuple[int, str, str, bytes, int]:
-    suffix = path.suffix.lower()
+def _decoded_text(data: bytes) -> str:
+    # Match Path.read_text's universal newline handling.
+    return data.decode("utf-8", errors="replace").replace("\r\n", "\n").replace("\r", "\n")
+
+
+class ExtractionError(RuntimeError):
+    """A required document extractor failed."""
+
+
+def _extract_with_tool(
+    command: list[str], tool_args: list[str], data: bytes, name: Path, path: Path | None,
+    strict: bool,
+) -> str:
+    def extract(input_path: Path) -> str:
+        invocation = [*command, str(input_path), *tool_args]
+        if not strict:
+            return run_text_tool(invocation)
+        try:
+            result = subprocess.run(invocation, check=True, capture_output=True)
+        except (FileNotFoundError, subprocess.CalledProcessError) as exc:
+            detail = exc.stderr.decode("utf-8", errors="replace").strip() if getattr(exc, "stderr", None) else str(exc)
+            raise ExtractionError(f"{command[0]} failed on {name.name}: {detail}") from exc
+        return result.stdout.decode("utf-8", errors="replace")
+
+    if path is not None:
+        return extract(path)
+    with tempfile.TemporaryDirectory() as directory:
+        input_path = Path(directory) / f"artifact{name.suffix}"
+        input_path.write_bytes(data)
+        return extract(input_path)
+
+
+def extract_text(
+    data: bytes, name: Path, mime: str, path: Path | None = None, *, strict_tools: bool = False,
+) -> tuple[int, str, str, bytes, int]:
+    suffix = name.suffix.lower()
+    if path is None and mime == "text/plain":
+        return CLASS_TEXT, "utf8-text", _decoded_text(data), b"", 1
     if suffix == ".tex":
-        text = tex_to_search_text(path.read_text(encoding="utf-8", errors="replace"))
+        text = tex_to_search_text(_decoded_text(data))
         return CLASS_TEXT, "tex-detex", text, b"", 1
     if suffix == ".pdf" or mime == "application/pdf":
         # Text-bearing PDF: pdftotext (poppler). A scanned PDF yields no text and
         # falls through to a descriptor-only card; OCR is a policy decision left
         # to the caller (see content_policy allow_ocr).
-        text = run_text_tool(["pdftotext", "-layout", "-enc", "UTF-8", str(path), "-"])
+        text = _extract_with_tool(["pdftotext", "-layout", "-enc", "UTF-8"], ["-"], data, name, path, strict_tools)
         return CLASS_TEXT, "pdftotext", text, b"", 1 if text.strip() else 0
     if suffix == ".epub":
-        text = run_text_tool(["pandoc", "--from", "epub", "--to", "plain", str(path)])
+        text = _extract_with_tool(["pandoc", "--from", "epub", "--to", "plain"], [], data, name, path, strict_tools)
         return CLASS_TEXT, "epub-pandoc", text, b"", 1 if text.strip() else 0
     if suffix in {".html", ".htm"} or mime == "text/html":
-        text = run_text_tool(["pandoc", "--from", "html", "--to", "plain", str(path)])
+        text = _extract_with_tool(["pandoc", "--from", "html", "--to", "plain"], [], data, name, path, strict_tools)
         if not text:
-            text = path.read_text(encoding="utf-8", errors="replace")
+            text = _decoded_text(data)
         return CLASS_TEXT, "html-pandoc", text, b"", 1
     if suffix in {".md", ".txt"} or mime.startswith("text/"):
-        return CLASS_TEXT, "utf8-text", path.read_text(encoding="utf-8", errors="replace"), b"", 1
+        return CLASS_TEXT, "utf8-text", _decoded_text(data), b"", 1
     if suffix == ".docx":
-        text = run_text_tool(["docx2txt", str(path), "-"])
+        text = _extract_with_tool(["docx2txt"], ["-"], data, name, path, strict_tools)
         return CLASS_TEXT, "docx2txt", text, b"", 1 if text else 0
     if suffix == ".doc":
-        text = run_text_tool(["catdoc", str(path)])
+        text = _extract_with_tool(["catdoc"], [], data, name, path, strict_tools)
         return CLASS_TEXT, "catdoc", text, b"", 1 if text else 0
     return 0, "", "", b"", 0
 
 
-def zip_project_metadata(path: Path) -> tuple[dict[str, Any], bytes, str]:
+def zip_project_metadata(archive: bytes) -> tuple[dict[str, Any], bytes, str]:
     try:
-        with zipfile.ZipFile(path, "r") as zf:
+        with zipfile.ZipFile(io.BytesIO(archive), "r") as zf:
             project = zf.read("project.yaml")
             data = parse_simple_yaml(project.decode("utf-8", errors="replace"))
             root = data.get("root_tex", "")
@@ -191,15 +234,43 @@ def classify(path: Path, mime: str) -> tuple[int, str]:
     return CLASS_TEXT, "generic"
 
 
-def build_card(args: argparse.Namespace) -> tuple[bytes, dict[str, Any]]:
-    path = Path(args.artifact)
-    data = path.read_bytes()
-    object_sha = sha256_bytes(data)
-    mime = detect_mime(path)
-    issued = args.card_issued_unix or utc_now()
-    work_created = args.work_created_unix if args.work_created_unix is not None else issued
-    work_revised = args.work_revised_unix if args.work_revised_unix is not None else issued
-    content_policy = load_content_policy(
+@dataclass(frozen=True)
+class SigningContext:
+    schema_sha: bytes
+    issuer_private: Any
+    issuer_public: str
+
+
+def signing_context(args: argparse.Namespace) -> SigningContext:
+    private = deterministic_private_key(args.issuer_seed)
+    schema_sha = sha256_bytes(Path(args.schema).read_bytes()) if args.schema else bytes(32)
+    return SigningContext(schema_sha, private, public_key_pem(private).strip())
+
+
+@dataclass
+class Prepared:
+    name: str
+    artifact_path: str
+    nbytes: int
+    object_sha256: bytes
+    mime: str
+    arena_class: int
+    handler: str
+    classification_count: int
+    machine_payload: bytes
+    source_or_manifest_sha256: bytes
+    segments: TextSegments
+    extracted_text: str
+    title_source: str
+    full_text: str
+    body_text: str
+    content_policy: dict[str, Any]
+    wants_vector: bool
+    preimage: str
+
+
+def resolve_content_policy(args: argparse.Namespace) -> dict[str, Any]:
+    return load_content_policy(
         args.content_policy,
         name=args.policy_name,
         allow_text_prefix=bool_override(args.allow_text_prefix, args.no_text_prefix),
@@ -209,29 +280,48 @@ def build_card(args: argparse.Namespace) -> tuple[bytes, dict[str, Any]]:
         max_text_prefix_chars=args.max_text_prefix_chars,
     )
 
-    arena_class, handler, text, machine_payload, classification_count = extract_text(path, mime)
+
+def prepare_card(
+    data: bytes, name: str, args: argparse.Namespace, *, path: Path | None = None,
+    mime: str | None = None, content_policy: dict[str, Any] | None = None,
+    dataset_title: str | None = None, synthetic_title: str | None = None,
+    preimage_recipe: str = PREIMAGE_RECIPE_V2, strict_tools: bool = False,
+) -> Prepared:
+    name_path = Path(name)
+    if mime is None:
+        mime = (
+            detect_mime(path) if path is not None
+            else mimetypes.guess_type(name)[0] or "application/octet-stream"
+        )
+    content_policy = content_policy if content_policy is not None else resolve_content_policy(args)
+
+    arena_class, handler, text, machine_payload, classification_count = extract_text(data, name_path, mime, path, strict_tools=strict_tools)
     project: dict[str, Any] = {}
     source_or_manifest = b"\0" * 32
-    if not handler and zipfile.is_zipfile(path):
-        project, manifest_bytes, text = zip_project_metadata(path)
+    if not handler and zipfile.is_zipfile(io.BytesIO(data)):
+        project, manifest_bytes, text = zip_project_metadata(data)
         arena_class = CLASS_COLLECTION
         handler = "clawxiv-zip" if project else "archive"
         if manifest_bytes:
             source_or_manifest = sha256_bytes(manifest_bytes)
 
     if not handler:
-        arena_class, handler = classify(path, mime)
+        arena_class, handler = classify(name_path, mime)
         if arena_class == CLASS_STILL_IMAGE:
             machine_payload = (
-                image_payload(path, int(content_policy.get("max_image_preview_bytes", 128) or 0))
+                image_payload(data, int(content_policy.get("max_image_preview_bytes", 128) or 0))
                 if content_policy.get("allow_image_thumbnail")
                 else b""
             )
-            text = args.abstract or f"Image artefact: {path.name}; MIME {mime}; {len(data)} bytes."
+            text = args.abstract or f"Image artefact: {name_path.name}; MIME {mime}; {len(data)} bytes."
         else:
-            text = args.abstract or f"{handler.capitalize()} artefact: {path.name}; MIME {mime}; {len(data)} bytes."
+            text = args.abstract or f"{handler.capitalize()} artefact: {name_path.name}; MIME {mime}; {len(data)} bytes."
 
-    title = args.title or project.get("title") or path.name
+    titles = (
+        (args.title, "cli"), (dataset_title, "dataset"), (project.get("title"), "metadata"),
+        (synthetic_title, "synthetic"), (name_path.name, "filename"),
+    )
+    title, title_source = next(item for item in titles if item[0])
     abstract = args.abstract or project.get("abstract") or project.get("description") or first_paragraph(text, f"{handler} artefact")
     keywords = args.keywords or project.get("keywords") or ""
     if isinstance(keywords, list):
@@ -241,27 +331,42 @@ def build_card(args: argparse.Namespace) -> tuple[bytes, dict[str, Any]]:
     body_text = clamp_text_prefix(full_text, content_policy)
     segments = TextSegments(title=title, abstract=abstract, keywords=keywords, classification=classification, body=body_text)
 
-    embedding = b""
-    embedding_profile_id = PROFILE_NONE
-    embedding_policy: dict[str, Any] = {"embedding_mode": "none"}
-    if (
-        content_policy.get("allow_doc_vector")
-        and arena_class in {CLASS_TEXT, CLASS_DATASET, CLASS_COLLECTION}
-        and full_text
-    ):
-        # Vector over the full extracted text; the policy clamp only limits
-        # the human-readable prefix stored on the card.
-        preimage = embedding_source_text(segments, full_text)
-        embedding, embedding_policy = document_embedding_f16le(preimage, args.embedding_model)
-        embedding_profile_id = embedding_policy["embedding_profile_id"]
-        machine_payload = embedding
-    elif machine_payload:
+    extracted_text = unicodedata.normalize("NFC", text)
+    preimage = embedding_source_text(
+        segments, full_text, recipe=preimage_recipe, include_title=title_source not in {"synthetic", "filename"},
+    )
+    return Prepared(
+        name=name, artifact_path=str(path) if path is not None else name,
+        nbytes=len(data), object_sha256=sha256_bytes(data), mime=mime,
+        arena_class=arena_class, handler=handler, classification_count=classification_count,
+        machine_payload=machine_payload, source_or_manifest_sha256=source_or_manifest,
+        segments=segments, extracted_text=extracted_text, title_source=title_source, full_text=full_text, body_text=body_text, content_policy=content_policy,
+        wants_vector=bool(
+            content_policy.get("allow_doc_vector")
+            and arena_class in {CLASS_TEXT, CLASS_DATASET, CLASS_COLLECTION}
+            and full_text
+        ),
+        preimage=preimage,
+    )
+
+
+def pack_and_sign(
+    prep: Prepared, embedding: bytes, embedding_policy: dict[str, Any], args: argparse.Namespace,
+    *, verify: bool = True, include_preimage: bool = True,
+    signing: SigningContext | None = None, record_title_source: bool = False,
+) -> tuple[bytes, dict[str, Any]]:
+    issued = utc_now() if args.card_issued_unix is None else positive_issued_time(args.card_issued_unix)
+    work_created = args.work_created_unix if args.work_created_unix is not None else issued
+    work_revised = args.work_revised_unix if args.work_revised_unix is not None else issued
+    machine_payload = embedding if embedding else prep.machine_payload
+    profile_id = embedding_policy["embedding_profile_id"] if embedding else PROFILE_NONE
+    if not embedding and machine_payload:
         embedding_policy = {
             "embedding_mode": "machine-payload",
             "payload_sha256": sha256_hex(machine_payload),
             "payload_bytes": len(machine_payload),
         }
-
+    segments = prep.segments
     swarm_ref = bytes.fromhex(args.swarm_reference) if re.fullmatch(r"[0-9a-fA-F]{64}", args.swarm_reference) else b""
     locators = {
         "swarm_reference": swarm_ref.hex() if swarm_ref else "",
@@ -269,23 +374,23 @@ def build_card(args: argparse.Namespace) -> tuple[bytes, dict[str, Any]]:
         "ipns_name": args.ipns_name,
         "http_hint": args.http_hint,
     }
-    issuer_private = deterministic_private_key(args.issuer_seed)
-    schema_sha = sha256_bytes(Path(args.schema).read_bytes()) if args.schema else b"\0" * 32
+    signing = signing if signing is not None else signing_context(args)
+    issuer_private = signing.issuer_private
 
     card_input = CardInput(
         card_issued_unix=issued,
         work_created_unix=work_created,
         work_revised_unix=work_revised,
         sequence=args.sequence,
-        arena_class=arena_class,
-        size_class=size_class(len(data)),
-        schema_sha256=schema_sha,
-        object_sha256=object_sha,
-        source_or_manifest_sha256=source_or_manifest,
+        arena_class=prep.arena_class,
+        size_class=size_class(prep.nbytes),
+        schema_sha256=signing.schema_sha,
+        object_sha256=prep.object_sha256,
+        source_or_manifest_sha256=prep.source_or_manifest_sha256,
         issuer_private_key=issuer_private,
         responsible_orcid=args.orcid,
         author_count=0,
-        classification_count=classification_count,
+        classification_count=prep.classification_count,
         url_count=sum(1 for v in locators.values() if v),
         primary_author_fpr=b"\0" * 32,
         author_list_sha256=sha256_bytes(canonical_json_bytes([])),
@@ -297,20 +402,20 @@ def build_card(args: argparse.Namespace) -> tuple[bytes, dict[str, Any]]:
         locator_set_sha256=sha256_bytes(canonical_json_bytes(locators)),
         text=segments,
         embedding=machine_payload,
-        embedding_profile_id=embedding_profile_id,
+        embedding_profile_id=profile_id,
     )
     unsigned, pack_meta = pack_unsigned_card(card_input)
     signed = sign_card(unsigned, issuer_private)
-    verify_meta = verify_card(signed)
+    verify_meta = verify_card(signed) if verify else {}
     meta = {
         "schema": "libangel-general-cataloger-rc1",
         "artifact": {
-            "path": str(path),
-            "sha256": object_sha.hex(),
-            "bytes": len(data),
-            "mime": mime,
+            "path": prep.artifact_path,
+            "sha256": prep.object_sha256.hex(),
+            "bytes": prep.nbytes,
+            "mime": prep.mime,
         },
-        "handler": handler,
+        "handler": prep.handler,
         "cxcc": {
             "card_bytes": len(signed),
             "card_id": card_id(signed).hex(),
@@ -320,7 +425,7 @@ def build_card(args: argparse.Namespace) -> tuple[bytes, dict[str, Any]]:
         },
         "issuer": {
             "seed_label": args.issuer_seed,
-            "public_key_pem": public_key_pem(issuer_private).strip(),
+            "public_key_pem": signing.issuer_public,
             "key_kind": "deterministic-test-seed",
             "key_note": ("Private key derived from the public seed label; forgeable by design. "
                          "The signature attests reproducibility, not issuer identity."),
@@ -330,37 +435,51 @@ def build_card(args: argparse.Namespace) -> tuple[bytes, dict[str, Any]]:
             "abstract": segments.abstract,
             "keywords": segments.keywords,
             "classification": segments.classification,
-            "body_sha256": sha256_hex(body_text.encode("utf-8")),
-            "embedding_preimage": embedding_source_text(segments, full_text),
+            "body_sha256": sha256_hex(prep.body_text.encode("utf-8")),
         },
         "policy": embedding_policy,
-        "content_policy": content_policy,
+        "content_policy": prep.content_policy,
     }
+    if record_title_source:
+        meta["text_segments"]["title_source"] = prep.title_source
+    if include_preimage:
+        meta["text_segments"]["embedding_preimage"] = prep.preimage
+    elif prep.wants_vector:
+        meta["text_segments"]["embedding_preimage_sha256"] = sha256_hex(prep.preimage.encode("utf-8"))
     return signed, meta
 
 
-def main() -> None:
-    parser = argparse.ArgumentParser(description="Mint a general rc1 CXCC catalog card")
-    parser.add_argument("artifact")
-    parser.add_argument("--out-card", required=True)
-    parser.add_argument("--out-meta", required=True)
+def build_card(args: argparse.Namespace, *, legacy_embedding: bool = False) -> tuple[bytes, dict[str, Any]]:
+    path = Path(args.artifact)
+    # Resolve the original default at the start of minting, before extraction or embedding.
+    issued = utc_now() if args.card_issued_unix is None else positive_issued_time(args.card_issued_unix)
+    args = argparse.Namespace(**(vars(args) | {"card_issued_unix": issued}))
+    recipe = PREIMAGE_RECIPE_V2 if args.embed and not legacy_embedding else "body/v1"
+    prep = prepare_card(path.read_bytes(), path.name, args, path=path, preimage_recipe=recipe)
+    embedding, policy = b"", {"embedding_mode": "none"}
+    if prep.wants_vector:
+        embedding, policy = document_embedding_f16le(prep.preimage, args.embedding_model, recipe=recipe)
+    return pack_and_sign(prep, embedding, policy, args, record_title_source=bool(embedding) and not legacy_embedding)
+
+
+def license_id(value: str) -> str:
+    if not value.isascii() or len(value) > 8:
+        raise argparse.ArgumentTypeError("license ID must be at most 8 ASCII bytes, e.g. CC-BY-SA")
+    return value
+
+
+def add_run_options(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--schema", default=DEFAULT_SCHEMA)
     parser.add_argument("--issuer-seed", default=DEFAULT_ISSUER_SEED)
-    parser.add_argument("--sequence", type=int, default=1)
-    parser.add_argument("--card-issued-unix", type=int)
+    parser.add_argument("--card-issued-unix", "--issued-unix", type=positive_issued_time)
     parser.add_argument("--work-created-unix", type=int)
     parser.add_argument("--work-revised-unix", type=int)
-    parser.add_argument("--title", default="")
-    parser.add_argument("--abstract", default="")
-    parser.add_argument("--keywords", default="")
-    parser.add_argument("--classification", default="")
     parser.add_argument("--orcid", default="")
-    parser.add_argument("--license-id", default="CC0-1.0")
+    parser.add_argument("--license-id", type=license_id, default="CC0-1.0")
     parser.add_argument("--swarm-reference", default="")
     parser.add_argument("--ipfs-cid", default="")
     parser.add_argument("--ipns-name", default="")
     parser.add_argument("--http-hint", default="")
-    parser.add_argument("--embedding-model", default=DEFAULT_EMBEDDING_MODEL)
     parser.add_argument("--content-policy", help="JSON content extraction policy")
     parser.add_argument("--policy-name")
     parser.add_argument("--max-text-prefix-chars", type=int)
@@ -374,9 +493,30 @@ def main() -> None:
     parser.add_argument("--no-ocr", action="store_true")
     parser.add_argument("--no-embed", dest="embed", action="store_false")
     parser.set_defaults(embed=True)
+
+
+def add_card_options(parser: argparse.ArgumentParser) -> None:
+    add_run_options(parser)
+    parser.add_argument("--sequence", type=int, default=1)
+    parser.add_argument("--title", default="")
+    parser.add_argument("--abstract", default="")
+    parser.add_argument("--keywords", default="")
+    parser.add_argument("--classification", default="")
+    parser.add_argument("--embedding-model", default=DEFAULT_EMBEDDING_MODEL)
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser(description="Mint a general rc1 CXCC catalog card")
+    parser.add_argument("artifact")
+    parser.add_argument("--out-card", required=True)
+    parser.add_argument("--out-meta", required=True)
+    add_card_options(parser)
     args = parser.parse_args()
 
-    card, meta = build_card(args)
+    try:
+        card, meta = build_card(args)
+    except ValueError as exc:
+        parser.error(str(exc))
     out_card = Path(args.out_card)
     out_meta = Path(args.out_meta)
     out_card.parent.mkdir(parents=True, exist_ok=True)
