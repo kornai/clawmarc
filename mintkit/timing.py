@@ -54,6 +54,13 @@ class Timing:
                 total[0] += time.perf_counter() - started
                 total[1] += count
 
+    def add(self, stage: str, seconds: float, count: int = 1):
+        """Record busy time measured elsewhere, such as in a signing process."""
+        with self.lock:
+            total = self.stages[stage]
+            total[0] += seconds
+            total[1] += count
+
     def record_latency(self, samples):
         for elapsed in samples:
             self.cards_seen += 1

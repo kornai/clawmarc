@@ -59,8 +59,14 @@ def _mint_options(mint):
     mint.add_argument("--model-revision", help="Hugging Face commit for the selected model")
     mint.add_argument("--allow-remote-code", action="store_true", help="Allow the pinned jina-v3 adapter code")
     device = mint.add_mutually_exclusive_group()
-    device.add_argument("--device", default="cpu", type=_device)
+    device.add_argument("--device", type=_device, help="Default: cuda, then mps, then cpu, whichever is available")
     device.add_argument("--devices", nargs="+", type=_device, help="One embedding device per process")
+    mint.add_argument("--precision", choices=("auto", "fp32", "fp16", "bf16"), default="auto",
+                      help="Encoder precision; auto uses fp16 on CUDA for models checked against fp32, else fp32")
+    mint.add_argument("--direct-ids", action=argparse.BooleanOptionalAction, default=True,
+                      help="Feed planned token ids to the encoder instead of re-tokenizing decoded chunk text")
+    mint.add_argument("--sign-procs", type=_nonnegative, default=0,
+                      help="Sign cards in N worker processes; 0 signs in this process")
     mint.add_argument("--host-label", help="Human-readable host label for the run manifest")
     mint.add_argument("--runs-dir", type=Path, default=Path("runs"))
     mint.add_argument("--layout", choices=("shards", "files"), default="shards")
@@ -74,6 +80,8 @@ def _mint_options(mint):
     mint.add_argument("--threads", type=_nonnegative, default=1, help="Use 0 for unbatched serial minting")
     mint.add_argument("--prep-workers", type=_positive)
     mint.add_argument("--sign-workers", type=_positive, default=1)
+    mint.add_argument("--prep-procs", type=_nonnegative, default=0,
+                      help="Prepare and tokenize in N worker processes instead of --prep-workers threads (avoids the GIL)")
     mint.add_argument("--torch-threads", type=_positive)
     mint.add_argument("--batch-chunks", type=_positive, default=64)
     mint.add_argument("--sort-window", type=_positive, default=64)
@@ -109,7 +117,8 @@ def _parser():
     bench.add_argument("preset")
     bench.add_argument("--folder", type=Path)
     bench.add_argument("--models", nargs="+", default=["bge", "mbert", "mpnet"])
-    bench.add_argument("--device", type=_device, default="cpu")
+    bench.add_argument("--device", type=_device)
+    bench.add_argument("--precision", choices=("auto", "fp32", "fp16", "bf16"), default="auto")
     bench.add_argument("--runs-dir", type=Path, default=Path("runs"))
     bench.add_argument("--repeat", type=_positive, default=3)
     bench.add_argument("--sweep", nargs="+")
@@ -127,8 +136,8 @@ def _parser():
     _filter_options(evaluate)
     evaluate.add_argument("--backends", nargs="+", choices=BACKENDS, default=["mmap", "numpy"])
     evaluate.add_argument("--dims", nargs="+")
-    evaluate.add_argument("--device", nargs="+", type=_device, default=["cpu"])
-    evaluate.add_argument("--query-device", type=_device, default="cpu")
+    evaluate.add_argument("--device", nargs="+", type=_device)
+    evaluate.add_argument("--query-device", type=_device)
     evaluate.add_argument("--allow-remote-code", action="store_true")
     evaluate.add_argument("--k", nargs="+", type=_positive, default=[10, 100])
     evaluate.add_argument("--dtype", choices=("float16", "float32"), default="float32")
@@ -168,7 +177,7 @@ def _source_for_mint(args) -> Source:
 
 def _mint(args, invocation, *, resume_dir=None, previous=None):
     from . import _ref
-    from .models import resolve_models
+    from .models import default_device, resolve_models, resolve_precision
     from .pipeline import run_serial
     from .reductions import parse_reductions
 
@@ -178,10 +187,13 @@ def _mint(args, invocation, *, resume_dir=None, previous=None):
         if len(args.devices) != 1:
             raise ValueError("Mint supports one embedding device per process")
         args.device = args.devices[0]
+    if args.device is None:
+        args.device = default_device()
     physical = psutil.cpu_count(logical=False) or 1
     args.prep_workers = args.prep_workers or max(1, physical // 2)
     if args.torch_threads is None:
-        args.torch_threads = max(1, physical - args.prep_workers) if args.threads else physical
+        # Prepare workers mostly wait on I/O for text sources; pass --torch-threads for extraction-heavy runs.
+        args.torch_threads = physical
     for name in ("schema", "content_policy"):
         if value := getattr(args, name):
             setattr(args, name, str(Path(value).expanduser().resolve()))
@@ -202,6 +214,14 @@ def _mint(args, invocation, *, resume_dir=None, previous=None):
                 raise ValueError(f"--card-dim {args.card_dim} is incompatible with {spec.alias} and its registered format")
     elif args.models or args.card_dim or args.keep_chunk_vectors or [red.name for red in reductions] != ["mean_tokw"]:
         raise ValueError("--no-embed cannot be combined with models, card dimensions, or embedding reductions")
+    args.precisions = {
+        alias: resolve_precision(args.precision, args.device, spec) if spec else None for alias, spec in models.items()
+    }
+    expected = (previous or {}).get("config", {}).get("precisions") or getattr(args, "replayed_precisions", None)
+    if previous is not None and expected is None:
+        expected = {alias: "fp32" if spec else None for alias, spec in models.items()}  # mintkit v0 runs were fp32
+    if expected is not None and any(expected[alias] != value for alias, value in args.precisions.items() if alias in expected):
+        raise ValueError(f"Encoder precision {args.precisions} differs from the recorded run {expected}; pass --precision explicitly")
     return run_serial(source, args, models, ["python", "-m", "mintkit", *invocation], reductions, resume_dir=resume_dir, previous=previous)
 
 
@@ -210,7 +230,7 @@ def _saved_settings(mint_parser, config, *, manifest, cwd=None):
     settings = {}
     for raw, value in config.items():
         key = raw.replace("-", "_")
-        if key in {"model_specs", "issued_unix", "embedding_model", *MINT_DEFAULTS} and manifest:
+        if key in {"model_specs", "issued_unix", "embedding_model", "precisions", "replayed_precisions", *MINT_DEFAULTS} and manifest:
             continue
         if key not in actions or key in {"help", "resume", "config"}:
             raise ValueError(f"Unknown mint setting {raw!r}")
@@ -254,6 +274,7 @@ def _mint_command(parser, mint_parser, args, invocation):
         if previous["status"] == "complete" or not (directory / ".checkpoints").is_dir():
             raise ValueError("The run has no resumable checkpoint")
         config = _saved_settings(mint_parser, previous["config"], manifest=True)
+        config.setdefault("direct_ids", False)
         saved = argparse.Namespace(**(vars(args) | config | MINT_DEFAULTS))
         cwd = Path(previous.get("cwd", "."))
         with contextlib.chdir(cwd):
@@ -279,9 +300,16 @@ def _mint_command(parser, mint_parser, args, invocation):
         if not isinstance(config, dict):
             raise ValueError("Mint settings must be a mapping")
         settings = _saved_settings(mint_parser, config, manifest=is_manifest)
+        if is_manifest:
+            settings.setdefault("direct_ids", False)  # mintkit v0 re-tokenized decoded chunk text
         mint_parser.set_defaults(**settings)
+        replayed = parser.parse_args(invocation)
+        if is_manifest:
+            replayed.replayed_precisions = config.get("precisions") or {
+                alias: "fp32" if spec else None for alias, spec in config.get("model_specs", {}).items()
+            }
         with contextlib.chdir(default_cwd):
-            return _mint(parser.parse_args(invocation), invocation)
+            return _mint(replayed, invocation)
     return _mint(args, invocation)
 
 
@@ -308,7 +336,9 @@ def main(argv=None):
             print(f"Verified {verify(args.run_dir.expanduser(), use_c=args.c)} cards")
         elif args.subcommand == "bench":
             from .benchmark import bench
+            from .models import default_device
 
+            args.device = args.device or default_device()
             bench(args, parser, _mint)
             print(args.output)
         elif args.subcommand == "report":
@@ -327,7 +357,10 @@ def main(argv=None):
             print(f"Exported {count} vectors")
         elif args.subcommand == "eval":
             from .evaluate import evaluate
+            from .models import default_device
 
+            args.device = args.device or [default_device()]
+            args.query_device = args.query_device or args.device[0]
             args.run_dir = args.run_dir.expanduser()
             if args.compare_run:
                 args.compare_run = args.compare_run.expanduser()

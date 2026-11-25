@@ -4,6 +4,7 @@ import base64
 import dataclasses
 import hashlib
 import traceback
+from concurrent.futures import Future
 from copy import deepcopy
 from collections import OrderedDict, defaultdict
 from threading import Lock, local
@@ -51,6 +52,91 @@ def _span_metadata(plan):
     } for chunk in plan.chunks]
 
 
+class _RecordingTokenizer:
+    """Forward to a tokenizer and keep the ids of the last whole-text call; plan_chunks tokenizes once.
+
+    With skip_decode, chunk texts come back empty: the encoder reads the ids, and only ctxprefix needs text.
+    """
+
+    def __init__(self, tokenizer, skip_decode=False):
+        object.__setattr__(self, "_tokenizer", tokenizer)
+        object.__setattr__(self, "ids", None)
+        object.__setattr__(self, "skip_decode", skip_decode)
+
+    def decode(self, *args, **kwargs):
+        return "" if self.skip_decode else self._tokenizer.decode(*args, **kwargs)
+
+    def __getattr__(self, name):
+        return getattr(self._tokenizer, name)
+
+    def __setattr__(self, name, value):
+        setattr(self._tokenizer, name, value)
+
+    def __call__(self, *args, **kwargs):
+        encoded = self._tokenizer(*args, **kwargs)
+        object.__setattr__(self, "ids", list(encoded["input_ids"]))
+        return encoded
+
+    def encode(self, *args, **kwargs):
+        ids = self._tokenizer.encode(*args, **kwargs)
+        object.__setattr__(self, "ids", list(ids))
+        return ids
+
+
+class DirectEncoder:
+    """Run planned token ids through the model's own modules (transformer, pooling, normalize)."""
+
+    def __init__(self, model, device):
+        import torch
+
+        tokenizer = model.tokenizer
+        inner = tokenizer("x", add_special_tokens=False)["input_ids"]
+        full = tokenizer("x")["input_ids"]
+        start = next((i for i in range(len(full) - len(inner) + 1) if full[i:i + len(inner)] == inner), None)
+        if not inner or start is None:
+            raise ValueError("Cannot locate the special-token template of the tokenizer")
+        self.prefix, self.suffix = list(full[:start]), list(full[start + len(inner):])
+        self.pad = tokenizer.pad_token_id if tokenizer.pad_token_id is not None else 0
+        self.token_types = "token_type_ids" in getattr(tokenizer, "model_input_names", ())
+        self.limit = (model.max_seq_length or tokenizer.model_max_length) - len(self.prefix) - len(self.suffix)
+        self.model, self.device, self.torch = model, device, torch
+        self.pin = device.startswith("cuda")
+
+    def __call__(self, id_lists, batch_size):
+        torch = self.torch
+        parts = []
+        for begin in range(0, len(id_lists), batch_size):
+            rows = [self.prefix + list(ids[:self.limit]) + self.suffix for ids in id_lists[begin:begin + batch_size]]
+            width = max(map(len, rows))
+            input_ids = np.full((len(rows), width), self.pad, dtype=np.int64)
+            mask = np.zeros((len(rows), width), dtype=np.int64)
+            for row, ids in enumerate(rows):
+                input_ids[row, :len(ids)] = ids
+                mask[row, :len(ids)] = 1
+            features = {"input_ids": input_ids, "attention_mask": mask}
+            if self.token_types:
+                features["token_type_ids"] = np.zeros_like(input_ids)
+            tensors = {}
+            for key, value in features.items():
+                tensor = torch.from_numpy(value)
+                if self.pin:
+                    tensor = tensor.pin_memory()
+                tensors[key] = tensor.to(self.device, non_blocking=self.pin)
+            with torch.inference_mode():
+                pooled = self.model(tensors)["sentence_embedding"]
+                parts.append(torch.nn.functional.normalize(pooled.float(), dim=-1).cpu().numpy())
+        return np.concatenate(parts)
+
+
+def _settled(function, *args):
+    future = Future()
+    try:
+        future.set_result(function(*args))
+    except Exception as exc:
+        future.set_exception(exc)
+    return future
+
+
 class TextCache:
     """Share prepared document text between model passes under a byte limit."""
 
@@ -96,6 +182,9 @@ class Producer:
         self.timing = timing
         self.text_cache = text_cache
         self.model = None
+        self.direct = None
+        self.precision = getattr(args, "precisions", None) or {}
+        self.precision = self.precision.get(spec.alias, "fp32") if spec is not None else None
         self.tokenizers = local()
         self.tokenizer_lock = Lock()
         self.reductions = reductions
@@ -131,7 +220,13 @@ class Producer:
                     pass
                 else:
                     torch.set_num_threads(self.args.torch_threads)
-            self.model = self.spec.load(self.args.device, revision=self.args.model_revision)
+            self.model = self.spec.load(self.args.device, revision=self.args.model_revision, precision=self.precision)
+            if getattr(self.args, "direct_ids", False):
+                from torch.nn import Module
+
+                if not isinstance(self.model, Module) or self.spec.task_adapter:
+                    raise ValueError(f"{self.spec.alias} does not support --direct-ids; pass --no-direct-ids")
+                self.direct = DirectEncoder(self.model, self.args.device)
         with self.timing.measure("warmup", accelerator=True):
             self.model.encode(["mintkit warm-up"], normalize_embeddings=True, show_progress_bar=False)
 
@@ -150,7 +245,12 @@ class Producer:
     def _plan_with_tokenizer(self, prep, reduction, tokenizer):
         limit = _ref.body_tokens_for(self.model)
         if reduction.name != "ctxprefix":
-            return _ref.plan_chunks(prep, tokenizer, f"fixed:{limit}")
+            recorder = _RecordingTokenizer(tokenizer, skip_decode=self.direct is not None)
+            plan = _ref.plan_chunks(prep, recorder, f"fixed:{limit}")
+            ids = [recorder.ids[chunk.token_start:chunk.token_end] for chunk in plan.chunks]
+            if any(len(chunk_ids) != count for chunk_ids, count in zip(ids, plan.token_counts, strict=True)):
+                raise ValueError("Planned token ids do not match the chunk spans")
+            return plan, ids
         previous_limit = min(reduction.options["prev_tokens"], (limit - 1) // 2)
         title = prep.segments.title if prep.title_source not in {"synthetic", "filename"} else ""
         title_ids = tokenizer.encode(title, add_special_tokens=False) if reduction.options["title"] and title else []
@@ -159,33 +259,51 @@ class Producer:
         raw = dataclasses.replace(prep, preimage=prep.full_text)
         plan = _ref.plan_chunks(raw, tokenizer, f"fixed:{body_window}")
         previous = []
-        chunks = []
+        chunks, inputs = [], []
         for chunk in plan.chunks:
             ids = tokenizer.encode(chunk.text, add_special_tokens=False)[:body_window]
             prefix = previous[-previous_limit:] if previous_limit else []
             text = tokenizer.decode(title_ids + prefix + ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)
             chunks.append(dataclasses.replace(chunk, text=text))
+            inputs.append(title_ids + prefix + ids)
             previous = ids
-        return dataclasses.replace(plan, chunks=chunks)
+        return dataclasses.replace(plan, chunks=chunks), inputs
 
-    def encode_window(self, entries, executor=None):
+    def plan_window(self, entries, executor=None, plans=None):
+        """Start chunk planning for a window; embed_window waits for it, so planning overlaps the previous window.
+
+        plans holds results already planned by worker processes: {index: {label: result or exception}}.
+        """
         active = {index: prep for index, prep in entries.items() if prep.wants_vector and self.spec is not None}
         if not active:
-            return {}, {}
+            return {}
         if self.model is None:
             self._load()
+        if plans is not None:
+            def settle(result):
+                future = Future()
+                future.set_exception(result) if isinstance(result, Exception) else future.set_result(result)
+                return future
+            return {label: {index: settle(plans[index][label]) for index in active} for label in self.groups}
+        submit = executor.submit if executor else _settled
+        return {
+            label: {index: submit(self._plan, prep, reductions[0]) for index, prep in active.items()}
+            for label, reductions in self.groups.items()
+        }
+
+    def encode_window(self, entries, executor=None):
+        return self.embed_window(self.plan_window(entries, executor))
+
+    def embed_window(self, planned):
         vectors, errors = defaultdict(dict), {}
-        for label, reductions in self.groups.items():
-            plans = {}
-            pending = {index: prep for index, prep in active.items() if index not in errors}
-            tasks = {
-                index: executor.submit(self._plan, prep, reductions[0]) for index, prep in pending.items()
-            } if executor else {}
-            for index, prep in pending.items():
+        for label, tasks in planned.items():
+            plans, inputs = {}, {}
+            for index, task in tasks.items():
                 try:
-                    plans[index] = tasks[index].result() if tasks else self._plan(prep, reductions[0])
+                    plans[index], inputs[index] = task.result()
                 except Exception as exc:
-                    errors[index] = (label, exc)
+                    errors.setdefault(index, (label, exc))
+            plans = {index: plan for index, plan in plans.items() if index not in errors}
             slots = [(index, chunk_index, chunk) for index, plan in plans.items() for chunk_index, chunk in enumerate(plan.chunks)]
             if self.args.threads:
                 slots.sort(key=lambda item: (
@@ -198,11 +316,17 @@ class Producer:
             for batch in steps:
                 try:
                     with self.timing.measure("embed", len(batch), accelerator=True):
-                        options = {"batch_size": self.args.batch_chunks} if self.args.threads else {}
-                        values = self.model.encode(
-                            [item[2].text for item in batch], normalize_embeddings=True,
-                            convert_to_numpy=True, show_progress_bar=False, **options,
-                        )
+                        if self.direct is not None:
+                            values = self.direct(
+                                [inputs[index][pos] for index, pos, _ in batch],
+                                self.args.batch_chunks if self.args.threads else 32,
+                            )
+                        else:
+                            options = {"batch_size": self.args.batch_chunks} if self.args.threads else {}
+                            values = self.model.encode(
+                                [item[2].text for item in batch], normalize_embeddings=True,
+                                convert_to_numpy=True, show_progress_bar=False, **options,
+                            )
                         if values.shape != (len(batch), self.spec.dim) or not np.isfinite(values).all():
                             raise ValueError("Unexpected embedding shape or nonfinite chunk values")
                         for (index, pos, _), vector in zip(batch, values, strict=True):
@@ -258,6 +382,8 @@ class Producer:
                     digest.update(text)
                 policy["chunk_inputs_sha256"] = digest.hexdigest()
         policy["mrl"] = {"native_dim": self.spec.dim, "card_dim": dim, "mrl_trained": self.spec.mrl}
+        policy["precision"] = self.precision
+        policy["encoder_inputs"] = "planned-token-ids" if getattr(self.args, "direct_ids", False) else "decoded-chunk-text"
         card, meta = _ref.pack_and_sign(
             prep, embedding, policy, self.args, signing=self.signing,
             include_preimage=self.args.include_preimage, record_title_source=True,

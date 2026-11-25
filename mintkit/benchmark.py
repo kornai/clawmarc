@@ -13,7 +13,8 @@ import yaml
 BENCH_FIELDS = ("schema", "preset", "model", "device", "host", "cpu", "gpus", "python", "torch",
                 "run_ids", "settings", "cards_per_s_median", "cards_per_s_min", "cards_per_s_max",
                 "tokens_per_s_median", "latency_p99_s_median", "bottleneck")
-SWEEP_FIELDS = {"batch_chunks", "prep_workers", "sign_workers", "sort_window", "max_inflight", "torch_threads"}
+SWEEP_FIELDS = {"batch_chunks", "prep_workers", "sign_workers", "sort_window", "max_inflight", "torch_threads",
+                "prep_procs", "sign_procs"}
 
 
 def append_rows(path, fields, rows):
@@ -57,7 +58,7 @@ def bench(args, mint_parser, mint):
     source = defaults.pop("source", None) or (f"folder:{args.folder}" if args.folder else None)
     if source is None:
         raise ValueError("folder-pdf requires --folder")
-    template = ["mint", source, "--runs-dir", str(args.runs_dir), "--device", args.device,
+    template = ["mint", source, "--runs-dir", str(args.runs_dir), "--device", args.device, "--precision", args.precision,
                 "--models", *args.models, "--quiet"]
     for name, value in defaults.items():
         template.extend((f"--{name}", str(value)))

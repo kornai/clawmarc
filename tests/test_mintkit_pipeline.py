@@ -21,7 +21,7 @@ def test_window_checkpoint_resume_uses_original_batches(tmp_path, capsys, monkey
     options = [
         "mint", f"folder:{source}", "--models", "bge", "--sort-window", "2", "--max-inflight", "4",
         "--batch-chunks", "2", "--prep-workers", "2", "--shard-size", "3", "--issued-unix", "1782071790",
-        "--quiet", "--keep-chunk-vectors",
+        "--quiet", "--keep-chunk-vectors", "--no-direct-ids",
     ]
     assert main([*options, "--runs-dir", str(tmp_path / "baseline")]) == 0
     expected = Path(capsys.readouterr().out.strip())

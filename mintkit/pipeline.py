@@ -1,12 +1,14 @@
 """Run ordered prepare, embedding, signing, and checkpoint stages."""
 
 import json
+import multiprocessing
 import shutil
+import signal
 import sys
 import tempfile
 import time
 from collections import deque
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor
 from contextlib import ExitStack
 from dataclasses import asdict
 from itertools import islice
@@ -16,7 +18,8 @@ from . import _ref, manifest
 from .artifacts import CacheWriter, OutputWriter, tsv
 from .checkpoint import Journal, exclusive_run, window_identity
 from .operations import read_run
-from .produce import Producer, TextCache, failure, prepared_template
+from .produce import Producer, TextCache, _settled, failure, prepared_template, restore_template
+from .reductions import parse_reductions
 from .sources._io import sha256_file
 from .sources.base import select
 from .sources.folder import FolderSource
@@ -52,10 +55,10 @@ def _prepare(producer, doc):
         return None, failure(doc.doc_id, producer.spec.alias if producer.spec else "no-embed", stage, exc), started
 
 
-def _prepared_windows(selected, journal, producer, executor):
+def _prepared_windows(selected, journal, producer, executor, planner=None):
     args = producer.args
     size = args.sort_window
-    ahead = max(1, args.max_inflight // size) if executor else 1
+    ahead = max(1, args.max_inflight // size) if executor or planner else 1
     docs = iter(selected.iter_docs())
     pending = deque()
     resumed = len(journal.windows)
@@ -71,7 +74,10 @@ def _prepared_windows(selected, journal, producer, executor):
                 if journal.identity(index) != identity:
                     raise ValueError(f"Source changed in checkpoint window {index}")
             else:
-                jobs = [executor.submit(_prepare, producer, doc) for doc in batch] if executor else []
+                if planner is not None:
+                    jobs = [planner.submit(_prepare_and_plan, doc) for doc in batch]
+                else:
+                    jobs = [executor.submit(_prepare, producer, doc) for doc in batch] if executor else []
                 pending.append((identity, batch, jobs))
             index += 1
         if not pending:
@@ -83,28 +89,94 @@ def _prepared_windows(selected, journal, producer, executor):
         yield identity, batch, jobs
 
 
-def _complete_window(producer, batch, jobs, prep_pool, sign_pool):
-    ready = [job.result() for job in jobs] if jobs else [_prepare(producer, doc) for doc in batch]
-    prepared = {index: prep for index, (prep, error, _) in enumerate(ready) if error is None}
-    vectors, errors = producer.encode_window(prepared, prep_pool)
-    alias = producer.spec.alias if producer.spec else "no-embed"
+_SIGNER = None
+_PLANNER = None
 
-    def pack(index, doc):
+
+def _start_planner(args, source_name, spec, tokenizer, max_seq_length):
+    """Hold the parent's tokenizer in a worker process so prepare and chunk planning run outside its GIL."""
+    global _PLANNER
+    from types import SimpleNamespace
+
+    signal.signal(signal.SIGINT, signal.SIG_IGN)
+    _PLANNER = Producer(args, source_name, spec, parse_reductions(args.reductions), Timing("cpu"))
+    _PLANNER.model = SimpleNamespace(tokenizer=tokenizer, max_seq_length=max_seq_length)
+    _PLANNER.direct = True if getattr(args, "direct_ids", False) else None  # only selects skip_decode here
+
+
+def _portable(exc):
+    """Exceptions cross the process boundary as plain errors carrying the worker traceback."""
+    import traceback
+
+    return RuntimeError(f"{type(exc).__name__}: {exc}\n{''.join(traceback.format_exception(exc))}")
+
+
+def _prepare_and_plan(doc):
+    producer = _PLANNER
+    prep, error, started = _prepare(producer, doc)
+    prepared = time.perf_counter()
+    plans = {}
+    if error is None and prep.wants_vector:
+        for label, reductions in producer.groups.items():
+            try:
+                plans[label] = producer._plan(prep, reductions[0])
+            except Exception as exc:
+                plans[label] = _portable(exc)
+    return prep, error, started, plans, prepared - started, time.perf_counter() - prepared
+
+
+def _start_signer(args, source_name, spec):
+    """Build one signing context per worker process; Ctrl-C is handled by the parent."""
+    global _SIGNER
+    signal.signal(signal.SIGINT, signal.SIG_IGN)
+    _SIGNER = Producer(args, source_name, spec, parse_reductions(args.reductions), None)
+
+
+def _sign_in_worker(template, groups):
+    started = time.perf_counter()
+    results, caches = _SIGNER.pack_all(restore_template(template), groups)
+    return results, caches, time.perf_counter() - started
+
+
+def _stage_window(producer, batch, jobs, prep_pool):
+    """Wait for prepared documents and start chunk planning without waiting for it."""
+    ready = [job.result() for job in jobs] if jobs else [_prepare(producer, doc) for doc in batch]
+    plans = None
+    if ready and len(ready[0]) == 6:  # prepared and planned in worker processes
+        plans = {}
+        for index, (_, _, _, planned, prepare_s, chunk_s) in enumerate(ready):
+            plans[index] = planned
+            producer.timing.add("prepare", prepare_s)
+            producer.timing.add("chunk", chunk_s)
+        ready = [item[:3] for item in ready]
+    prepared = {index: prep for index, (prep, error, _) in enumerate(ready) if error is None}
+    return batch, ready, producer.plan_window(prepared, prep_pool, plans)
+
+
+def _embed_and_sign(producer, staged, sign_pool, procs):
+    """Embed one planned window and hand it to the signers; the returned callable collects ordered rows."""
+    batch, ready, planned = staged
+    vectors, errors = producer.embed_window(planned)
+    alias = producer.spec.alias if producer.spec else "no-embed"
+    args = producer.args
+
+    def describe(index, doc):
         prep, error, started = ready[index]
-        row = {"doc_id": doc.doc_id}
         if error is None and index in errors:
-            _, exc = errors[index]
-            error = failure(doc.doc_id, alias, "embed", exc)
+            error = failure(doc.doc_id, alias, "embed", errors[index][1])
+        return prep, error, started
+
+    def finish(doc, prep, error, signed):
+        row = {"doc_id": doc.doc_id}
         if error is None:
             try:
-                with producer.timing.measure("pack_sign"):
-                    row["results"], caches = producer.pack_all(prep, vectors.get(index, {}))
+                row["results"], caches = signed()
                 row["object_sha256"] = prep.object_sha256.hex()
-                if producer.args.keep_chunk_vectors:
-                    row["template"] = prepared_template(prep, include_preimage=producer.args.include_preimage)
+                if args.keep_chunk_vectors:
+                    row["template"] = prepared_template(prep, include_preimage=args.include_preimage)
                     row["caches"] = caches
                 allowance = prep.content_policy.get("max_text_prefix_chars", 0) or 0
-                if producer.args.keep_full_text and prep.content_policy.get("allow_text_prefix") and (
+                if args.keep_full_text and prep.content_policy.get("allow_text_prefix") and (
                     prep.content_policy["name"] == "public_library_science" or len(prep.extracted_text) <= int(allowance)
                 ):
                     row["full_text"] = prep.extracted_text
@@ -116,10 +188,39 @@ def _complete_window(producer, batch, jobs, prep_pool, sign_pool):
                 error = failure(doc.doc_id, alias, "pack_sign", exc)
         if error is not None:
             row = {"doc_id": doc.doc_id, "failure": error}
-        return row, started
+        return row
 
-    jobs = [sign_pool.submit(pack, i, doc) for i, doc in enumerate(batch)] if sign_pool else []
-    return [job.result() for job in jobs] if jobs else [pack(i, doc) for i, doc in enumerate(batch)]
+    def pack_here(prep, groups):
+        with producer.timing.measure("pack_sign"):
+            return producer.pack_all(prep, groups)
+
+    pending = []
+    for index, doc in enumerate(batch):
+        prep, error, started = describe(index, doc)
+        groups = vectors.get(index, {})
+        if error is not None:
+            job = None
+        elif procs:
+            job = sign_pool.submit(_sign_in_worker, prepared_template(prep, include_preimage=True), groups)
+        elif sign_pool is not None:
+            job = sign_pool.submit(pack_here, prep, groups)
+        else:
+            job = _settled(pack_here, prep, groups)
+        pending.append((index, doc, prep, error, started, job))
+
+    def collect():
+        completed = []
+        for index, doc, prep, error, started, job in pending:
+            def signed(job=job):
+                if not procs:
+                    return job.result()
+                results, caches, seconds = job.result()
+                producer.timing.add("pack_sign", seconds)
+                return results, caches
+            completed.append((finish(doc, prep, error, signed), started))
+        return completed
+
+    return collect
 
 
 def _publish(run_dir, alias, spec, reductions, args, journal, *, first, judged_ids):
@@ -194,11 +295,42 @@ def _mint_model(run_dir, run, selected, alias, spec, reductions, args, source, f
     with timing:
         try:
             producer = Producer(args, source.name, spec, reductions, timing, text_cache)
+            procs = getattr(args, "sign_procs", 0) if args.threads else 0
             with ExitStack() as stack:
                 prep_pool = stack.enter_context(ThreadPoolExecutor(args.prep_workers)) if args.threads else None
-                sign_pool = stack.enter_context(ThreadPoolExecutor(args.sign_workers)) if args.threads and args.sign_workers > 1 else None
-                for identity, batch, jobs in _prepared_windows(selected, journal, producer, prep_pool):
-                    completed = _complete_window(producer, batch, jobs, prep_pool, sign_pool)
+                planner = None
+                if args.threads and getattr(args, "prep_procs", 0) and spec is not None:
+                    producer._load()
+                    planner = stack.enter_context(ProcessPoolExecutor(
+                        args.prep_procs, mp_context=multiprocessing.get_context("spawn"), initializer=_start_planner,
+                        initargs=(args, source.name, spec, producer.model.tokenizer, producer.model.max_seq_length),
+                    ))
+                if procs:
+                    sign_pool = stack.enter_context(ProcessPoolExecutor(
+                        procs, mp_context=multiprocessing.get_context("spawn"),
+                        initializer=_start_signer, initargs=(args, source.name, spec),
+                    ))
+                else:
+                    sign_pool = stack.enter_context(ThreadPoolExecutor(args.sign_workers)) if args.threads and args.sign_workers > 1 else None
+                ahead = 1 if args.threads else 0
+                planned, signing = deque(), deque()
+
+                def windows():
+                    # Window N+1 is planned while window N is on the encoder, and signed while N+2 is embedded.
+                    for identity, batch, jobs in _prepared_windows(selected, journal, producer, prep_pool, planner):
+                        planned.append((identity, _stage_window(producer, batch, jobs, prep_pool)))
+                        while len(planned) > ahead:
+                            identity, staged = planned.popleft()
+                            signing.append((identity, _embed_and_sign(producer, staged, sign_pool, procs)))
+                            while len(signing) > ahead:
+                                yield signing.popleft()
+                    while planned:
+                        identity, staged = planned.popleft()
+                        signing.append((identity, _embed_and_sign(producer, staged, sign_pool, procs)))
+                    yield from signing
+
+                for identity, collect in windows():
+                    completed = collect()
                     rows = [row for row, _ in completed]
                     with timing.measure("write", len(rows)):
                         journal.commit(identity, rows)
@@ -220,8 +352,9 @@ def _mint_model(run_dir, run, selected, alias, spec, reductions, args, source, f
             )
         run["outputs"][alias] = output
     timing_data[alias] = timing.result(
-        new_cards, {"read": 1, "prepare": args.prep_workers if args.threads else 1,
-                    "chunk": args.prep_workers if args.threads else 1, "embed": 1, "pack_sign": args.sign_workers if args.threads else 1, "write": 1},
+        new_cards, {"read": 1, "prepare": (getattr(args, "prep_procs", 0) or args.prep_workers) if args.threads else 1,
+                    "chunk": (getattr(args, "prep_procs", 0) or args.prep_workers) if args.threads else 1, "embed": 1,
+                    "pack_sign": (getattr(args, "sign_procs", 0) or args.sign_workers) if args.threads else 1, "write": 1},
         tokens, chunks,
     )
     if not args.quiet:
@@ -256,7 +389,7 @@ def run_serial(source, args, models, command, reductions, *, resume_dir=None, pr
         source.excluded_files.update(run_root / name for name in ("INDEX.tsv", ".index.lock", ".index.pending"))
 
     config = {key: str(value) if isinstance(value, Path) else value for key, value in vars(args).items()
-              if key not in {"subcommand", "resume", "config"}}
+              if key not in {"subcommand", "resume", "config", "replayed_precisions"}}
     config["split"] = args.split or "none"
     config["model_specs"] = {alias: asdict(spec) if spec else None for alias, spec in models.items()}
     run = previous or {

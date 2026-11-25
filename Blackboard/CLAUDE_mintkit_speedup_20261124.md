@@ -4,7 +4,157 @@ to: GPT-5 Codex
 cc: VS, AK, Gemini
 date: 2026-11-24
 re: mintkit minting speed: measurements on the 4060 Ti and five changes to reach millions of documents in hours (mintkit v0, 1ad98cd)
+updated: 2026-11-25. Implemented by Claude, not Codex (see §0)
 ---
+
+# 0. Update 2026-11-25: implemented by Claude instead of Codex
+
+This note was addressed to Codex. On 2026-11-25, VS asked Claude
+(Opus 5.5, Claude Code) to implement it directly instead. **Codex: no
+need to act on §2 and §4. A review of the branch is welcome.**
+
+The work is on branch `mintkit-speedup` (from `vincesz-fred`). It was
+not committed at the time of writing. All measurements below are from
+VS's box (RTX 4060 Ti, i7-4790K).
+
+## 0.1 What changed
+
+| Step | Status | Where |
+|---|---|---|
+| S1 GPU default device; `torch_threads` = all physical cores | done | `cli.py` (`models.default_device`) |
+| S2 `--precision {auto,fp32,fp16,bf16}`; precision in sidecar policy and manifest | done | `models.py`, `produce.py`, `cli.py` |
+| S3 token ids fed directly (`--direct-ids`, the default); planning of window N+1 overlapped with the GPU work on window N | done | `produce.py` (`DirectEncoder`, `plan_window` / `embed_window`), `pipeline.py` |
+| S4 `--sign-procs N` (process pool, signing of window N overlapped with embedding of N+1) | done | `pipeline.py` |
+| extra: `--prep-procs N`: prepare and tokenize in processes (see 0.3) | done, opt-in | `pipeline.py` |
+| S5 `bench mldr-200` on the 4060 Ti | done | `benchmarks/results.csv` |
+| S5 `msmarco-10k`, CPU and AK's M2 bench | **not run** | |
+
+Details:
+
+- **Precision.** `auto` means fp16 on CUDA for models with
+  `half_safe=True` (bge, MPNet), and fp32 everywhere else.
+  `policy.precision` and `policy.encoder_inputs` are added to each
+  sidecar, and `config.precisions` to the manifest. Resume and
+  `--config` replay refuse to run if the precision differs. A v0
+  manifest counts as fp32, and its replay uses `--no-direct-ids`.
+- **Direct ids.** The pipeline calls `model(features)`, so the model's
+  own Transformer, Pooling and Normalize modules run, followed by an
+  fp32 L2 normalize, which is what `encode(normalize_embeddings=True)`
+  does. Special tokens are taken from the tokenizer's own template.
+  `plan_chunks` stays unchanged in `reference/`. A recording proxy keeps
+  the ids it computes, and on the direct path it skips decoding chunk
+  text (decoding was about 20% of planning time). ctxprefix still
+  decodes, because `chunk_inputs_sha256` hashes the text.
+- **Tests.** `tests/test_mintkit_speedup.py` adds:
+  - precision resolution,
+  - replay rejecting a precision mismatch,
+  - `--sign-procs` cards byte-identical to in-process signing,
+  - `--prep-procs` cards and chunk caches byte-identical to threads.
+
+  `tests/test_mintkit_pipeline.py` now passes `--no-direct-ids`
+  because its fake model is not a torch module. 13 passed, 2 skipped.
+- **Acceptance script.** `scripts/mintkit_speedup_check.py` re-runs every
+  comparison below.
+
+## 0.2 Acceptance results (200 MLDR en dev positives)
+
+**fp16 vs fp32 (direct path).** The document-level test passes for all
+three models:
+
+| | doc cosine min | chunk cosine min | chunks < 0.999 |
+|---|---|---|---|
+| bge fp16 | 0.9999999 | 0.999999 | 0 |
+| MPNet fp16 | 0.9999999 | 0.999998 | 0 |
+| mBERT fp16 | 0.999998 | 0.99925 | 0 |
+| mBERT bf16 | 0.99976 | **0.9385** | 6 |
+
+- Bit-identical f16 card vectors, fp16 vs fp32: 0/200 for every model.
+  Cards differ, as expected.
+- bf16 is *worse* than fp16 for mBERT. The 0.931 fp16 outlier in §1.2
+  did not reproduce through the direct path. It was measured through
+  `encode`, on re-tokenized text, and remains unexplained.
+- mBERT therefore stays fp32 under `auto`, as §2.1 asked.
+  `--precision fp16` is available, and **VS decides** whether to
+  switch it on by default (the s/doc table below shows the effect).
+
+**Direct ids vs `encode`.** The criterion as written in §2.2 (document
+cosine ≥ 0.99999) **fails**, and the cause is the caveat in §2.2. Many
+chunks do not round-trip through decode and re-tokenize to the same
+ids, so v0 often embedded tokens different from the ones its sidecar
+counted:
+
+| | chunks | re-tokenized differently | doc cosine min (direct vs encode) |
+|---|---|---|---|
+| bge | 3,270 | 323 (10%) | 0.9958 |
+| MPNet | 13,779 | 4,728 (34%) | 0.9990 |
+| mBERT | 3,441 | 1,799 (52%) | 0.9800 |
+
+On the chunks whose ids do round-trip, direct and `encode` agree to a
+cosine of ≥ 0.9999997 for all three models. Chunk counts and token
+counts in the sidecar are identical between the two paths. **The direct
+path is exact. The difference is v0's decode/re-encode step, so v0 and
+new cards are not comparable vector-for-vector.**
+
+**Speed** (`bench mldr-200`, 3 repeats, median, default settings,
+including pipeline fill on only 200 documents):
+
+| | v0 s/doc | now s/doc | tok/s |
+|---|---|---|---|
+| bge (fp16) | 0.110 | **0.033** | 237k |
+| MPNet (fp16) | 0.244 | **0.084** | 103k |
+| mBERT (fp32) | 0.224 | 0.182 | 44k |
+| mBERT (`--precision fp16`, from the check script) | | 0.067 | |
+
+## 0.3 What limits speed now: the CPU, not the GPU
+
+After fp16 and direct ids, bge encodes about 370–400k tok/s. Planning
+then costs about as much as the GPU work: roughly 35 ms of CPU per MLDR
+document, most of it Python in `plan_chunks` and the tokenizer call.
+This box has only 4 cores, and with threads the GIL serializes that
+work. Embed busy time also grows (25.9 s vs 17.2 s per 1,000 documents)
+because the main thread waits on the GIL.
+
+`--prep-procs N` moves prepare and planning into worker processes. The
+parent's tokenizer is pickled once per worker. On 1,000 MLDR corpus
+documents (~7.6k tokens each), bge fp16:
+
+| settings | s/doc | embed busy share |
+|---|---|---|
+| threads (default) | 0.031 | 0.85* |
+| `--prep-procs 3` | 0.026 | 0.67 |
+| `--prep-procs 2 --sign-procs 1` | **0.023** | 0.76 |
+
+\* Inflated: GIL waits are counted as embed time.
+
+Worker startup takes about 3 s. That cancels the gain on 200-document
+runs, so the flag is opt-in. For the 2M-document target: **bge at about
+0.020–0.023 s/doc is about 11–13 h on this box.** §2.2's target of
+≤ 0.02 is essentially reached at scale. A machine with more cores would
+let the GPU reach its ceiling of about 0.017.
+
+**Short documents** (synthetic folder, 10k × ~143 tokens, bge): about
+300 docs/s, so 2M documents take about 1.9 h. Signing is not the limit:
+it is 22% busy in-process and 12% with `--sign-procs 2`, against embed
+at 15%, and cards are byte-identical. The limit is per-file preparation
+in the folder source (90% busy).
+
+## 0.4 Open for VS / AK
+
+1. ~~Should mBERT use fp16 under `auto`?~~ **Decided by VS
+   (2026-11-25): mBERT stays fp32 under `auto` for now.**
+   `--precision fp16` remains available, and bf16 should not be used.
+2. Direct-ids cards differ from v0 cards (0.2). Runs minted before this
+   change should not be mixed with new runs in one comparison.
+3. **Deferred by VS (2026-11-25):** the options in §3 are recorded but
+   not pursued now. For long documents in "a few hours" on one 4060 Ti,
+   one of them would still be needed:
+   - cap the tokens embedded per document (a new reduction spec);
+   - a smaller or faster model per profile;
+   - one embedder per GPU across more GPUs;
+   - ONNX Runtime / TensorRT;
+   - a machine with more CPU cores, which would also lift the CPU limit
+     described in 0.3.
+4. Still to run: `bench msmarco-10k`, and the CPU and M2 rows.
 
 # Summary
 

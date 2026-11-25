@@ -15,25 +15,56 @@ class ModelSpec:
     query_prefix: str = ""
     mrl: bool = False
     task_adapter: bool = False
+    half_safe: bool = False  # fp16 document vectors checked against fp32 (cosine >= 0.9995)
 
-    def load(self, device: str, *, query: bool = False, revision: str | None = None):
+    def load(self, device: str, *, query: bool = False, revision: str | None = None, precision: str = "fp32"):
         if not self.task_adapter and revision is None:
-            return _ref.load_embedding_model(self.name, device)
-        from sentence_transformers import SentenceTransformer
+            model = _ref.load_embedding_model(self.name, device)
+        else:
+            from sentence_transformers import SentenceTransformer
 
-        kwargs = {}
-        if self.task_adapter:
-            kwargs = {
-                "trust_remote_code": True,
-                "model_kwargs": {"default_task": "retrieval.query" if query else "retrieval.passage"},
-            }
-        return SentenceTransformer(self.name, device=device, revision=revision, **kwargs)
+            kwargs = {}
+            if self.task_adapter:
+                kwargs = {
+                    "trust_remote_code": True,
+                    "model_kwargs": {"default_task": "retrieval.query" if query else "retrieval.passage"},
+                }
+            model = SentenceTransformer(self.name, device=device, revision=revision, **kwargs)
+        if precision != "fp32":
+            import torch
+
+            model.to(PRECISIONS[precision](torch))
+        return model
+
+
+PRECISIONS = {"fp32": lambda torch: torch.float32, "fp16": lambda torch: torch.float16, "bf16": lambda torch: torch.bfloat16}
+
+
+def resolve_precision(requested: str, device: str, spec: ModelSpec) -> str:
+    """Pick the encoder precision: fp16 only on accelerators and for models checked against fp32."""
+    if requested == "auto":
+        return "fp16" if device.startswith("cuda") and spec.half_safe else "fp32"
+    if requested == "fp16" and device == "cpu":
+        raise ValueError("--precision fp16 requires a cuda or mps device")
+    return requested
+
+
+def default_device() -> str:
+    try:
+        import torch
+    except ImportError:
+        return "cpu"
+    if torch.cuda.is_available():
+        return "cuda"
+    if getattr(torch.backends, "mps", None) is not None and torch.backends.mps.is_available():
+        return "mps"
+    return "cpu"
 
 
 MODELS = {
-    "bge": ModelSpec("bge", "BAAI/bge-small-en-v1.5", 384, 1, "Represent this sentence for searching relevant passages: "),
+    "bge": ModelSpec("bge", "BAAI/bge-small-en-v1.5", 384, 1, "Represent this sentence for searching relevant passages: ", half_safe=True),
     "mbert": ModelSpec("mbert", "bert-base-multilingual-cased", 768, 2),
-    "mpnet": ModelSpec("mpnet", "sentence-transformers/paraphrase-multilingual-mpnet-base-v2", 768, 3),
+    "mpnet": ModelSpec("mpnet", "sentence-transformers/paraphrase-multilingual-mpnet-base-v2", 768, 3, half_safe=True),
     "bge-m3": ModelSpec("bge-m3", "BAAI/bge-m3", 1024),
     "jina-v3": ModelSpec("jina-v3", "jinaai/jina-embeddings-v3", 1024, mrl=True, task_adapter=True),
 }
